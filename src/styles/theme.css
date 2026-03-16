@@ -1,0 +1,97 @@
+:root {
+  /* === Base (Anthropic brand-derived) === */
+  --bg-deep: #141413;
+  --bg-surface: #1c1c1a;
+  --bg-elevated: #252522;
+  --text-primary: #faf9f5;
+  --text-secondary: #b0aea5;
+  --text-muted: #706f6a;
+  --border-subtle: #2a2a27;
+
+  /* === Status Accents === */
+  --status-active: #d97757;
+  --status-running: #6a9bcc;
+  --status-success: #788c5d;
+  --status-error: #c4443a;
+  --status-idle: #b0aea5;
+
+  /* === Canvas === */
+  --canvas-dot: #2a2a27;
+  --canvas-dot-active: #3a3a36;
+
+  /* === Typography === */
+  --font-heading: 'Poppins', Arial, sans-serif;
+  --font-body: 'Lora', Georgia, serif;
+  --font-mono: 'JetBrains Mono', Menlo, monospace;
+
+  /* === Spacing === */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* === Transitions === */
+  --transition-fast: 150ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 600ms ease;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* === Light Theme === */
+:root[data-theme="light"] {
+  --bg-deep: #f5f4f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #eeedea;
+  --text-primary: #141413;
+  --text-secondary: #5c5b56;
+  --text-muted: #9a988f;
+  --border-subtle: #dddcd7;
+
+  --status-active: #c06840;
+  --status-running: #4a7eab;
+  --status-success: #5a6e42;
+  --status-error: #b03a32;
+  --status-idle: #9a988f;
+
+  --canvas-dot: #dddcd7;
+  --canvas-dot-active: #cccbc5;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(217, 119, 87, 0.3);
+  color: var(--text-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

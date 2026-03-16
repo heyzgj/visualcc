@@ -1,0 +1,286 @@
+/* Session tile node */
+.session-node {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition-fast), box-shadow var(--transition-slow), border-color var(--transition-slow);
+  animation: tile-appear 300ms var(--spring) both;
+  position: relative;
+}
+
+.session-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.session-node.resizing {
+  transition: none;
+  transform: none;
+}
+
+/* Content wrapper — prevents scroll from leaking to canvas */
+.tile-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Resize handle */
+.tile-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 10;
+}
+
+.tile-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.4;
+  transition: opacity var(--transition-fast);
+}
+
+.session-node:hover .tile-resize-handle::after {
+  opacity: 0.8;
+}
+
+/* Status-based borders and glows */
+.session-node[data-status="running"] {
+  border-color: var(--status-running);
+  box-shadow: 0 0 20px rgba(106, 155, 204, 0.12), 0 0 1px var(--status-running);
+}
+
+.session-node[data-status="active"] {
+  border-color: var(--status-active);
+  box-shadow: 0 0 20px rgba(217, 119, 87, 0.15), 0 0 1px var(--status-active);
+  animation: attention-pulse 2s ease-in-out infinite;
+}
+
+.session-node[data-status="success"] {
+  border-color: var(--status-success);
+  box-shadow: 0 0 20px rgba(120, 140, 93, 0.12), 0 0 1px var(--status-success);
+}
+
+.session-node[data-status="error"] {
+  border-color: var(--status-error);
+  box-shadow: 0 0 20px rgba(196, 68, 58, 0.2), 0 0 1px var(--status-error);
+}
+
+.session-node[data-status="idle"] {
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+.session-node[data-status="done"] {
+  border-color: var(--border-subtle);
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+/* Tile header */
+.tile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  min-height: 36px;
+  flex-shrink: 0;
+  user-select: none;
+  cursor: grab;
+}
+
+.tile-header:active {
+  cursor: grabbing;
+}
+
+.tile-header .tool-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tile-header .tool-icon.claude {
+  background: var(--status-active);
+}
+
+.tile-header .tool-icon.codex {
+  background: var(--text-secondary);
+}
+
+.tile-header .session-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-header .session-path {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.tile-header .close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.tile-header .close-btn:hover {
+  background: rgba(196, 68, 58, 0.2);
+  color: var(--status-error);
+}
+
+/* Terminal area */
+.tile-terminal {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.tile-terminal .xterm {
+  height: 100%;
+  padding: 4px;
+}
+
+/* Compact card (shown at low zoom) */
+.tile-compact {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-deep);
+  padding: 16px;
+}
+
+.tile-compact .compact-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.tile-compact .compact-label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Tile footer */
+.tile-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  min-height: 28px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tile-footer .session-timer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tile-footer .status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: auto;
+}
+
+.tile-footer .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tile-footer .status-dot.running {
+  background: var(--status-running);
+  animation: dot-pulse 1.5s ease-in-out infinite;
+}
+
+.tile-footer .status-dot.active {
+  background: var(--status-active);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.tile-footer .status-dot.success { background: var(--status-success); }
+.tile-footer .status-dot.error { background: var(--status-error); }
+.tile-footer .status-dot.idle { background: var(--status-idle); }
+.tile-footer .status-dot.done { background: var(--text-muted); }
+
+/* Animations */
+@keyframes tile-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes attention-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(217, 119, 87, 0.15), 0 0 1px var(--status-active); }
+  50% { box-shadow: 0 0 35px rgba(217, 119, 87, 0.3), 0 0 2px var(--status-active); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

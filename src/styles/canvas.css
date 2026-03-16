@@ -1,0 +1,94 @@
+/* React Flow canvas overrides */
+.react-flow {
+  background: var(--bg-deep) !important;
+}
+
+.react-flow__background {
+  background: var(--bg-deep) !important;
+}
+
+/* Dot grid pattern */
+.react-flow__background pattern circle {
+  fill: var(--canvas-dot) !important;
+}
+
+/* Canvas grain overlay */
+.canvas-grain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* React Flow controls styling */
+.react-flow__controls {
+  display: none; /* We use our own toolbar */
+}
+
+/* Minimap styling */
+.react-flow__minimap {
+  background: rgba(28, 28, 26, 0.8) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(217, 119, 87, 0.08) !important;
+  stroke: var(--status-active) !important;
+  stroke-width: 1 !important;
+}
+
+/* Edge styling (if we add connections later) */
+.react-flow__edge-path {
+  stroke: var(--border-subtle) !important;
+  stroke-width: 1.5 !important;
+}
+
+/* Selection box */
+.react-flow__selection {
+  background: rgba(106, 155, 204, 0.08) !important;
+  border: 1px solid rgba(106, 155, 204, 0.3) !important;
+}
+
+/* Attribution removal (React Flow Pro) */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Zoom indicator */
+.zoom-indicator {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(28, 28, 26, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 4px 12px;
+  z-index: 10;
+  user-select: none;
+}
+
+/* === Light theme overrides === */
+:root[data-theme="light"] .react-flow__minimap {
+  background: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .zoom-indicator {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
