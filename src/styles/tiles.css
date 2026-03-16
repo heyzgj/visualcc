@@ -210,6 +210,13 @@
   text-align: center;
 }
 
+.tile-compact .compact-hint {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* Tile footer */
 .tile-footer {
   display: flex;
@@ -262,6 +269,71 @@
 .tile-footer .status-dot.error { background: var(--status-error); }
 .tile-footer .status-dot.idle { background: var(--status-idle); }
 .tile-footer .status-dot.done { background: var(--text-muted); }
+
+/* Ghost tiles — persisted sessions from previous launch */
+.session-node--ghost {
+  opacity: 0.55;
+  border-style: dashed;
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+.session-node--ghost:hover {
+  opacity: 0.8;
+}
+
+.tile-ghost {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg-deep);
+  padding: 24px;
+}
+
+.tile-ghost .ghost-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+
+.tile-ghost .ghost-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tile-ghost .ghost-relaunch-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tile-ghost .ghost-relaunch-btn:hover {
+  background: var(--status-active);
+  border-color: var(--status-active);
+  color: #fff;
+}
+
+.tile-footer .ghost-hint {
+  font-style: italic;
+  color: var(--text-muted);
+}
 
 /* Animations */
 @keyframes tile-appear {

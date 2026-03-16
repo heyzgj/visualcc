@@ -103,6 +103,35 @@ export function useSession() {
     }
   }
 
+  async function relaunchSession(ghostId: string) {
+    const ghost = useSessionStore.getState().sessions.find((s) => s.id === ghostId);
+    if (!ghost) return;
+
+    try {
+      const id = await invoke<string>('create_session', {
+        tool: ghost.tool,
+        cwd: ghost.cwd,
+        initialPrompt: null,
+      });
+
+      const session: SessionInfo = {
+        id,
+        tool: ghost.tool,
+        cwd: ghost.cwd,
+        label: ghost.label,
+        status: 'running',
+        created_at: Date.now(),
+        position: ghost.position,
+      };
+
+      useSessionStore.getState().relaunchGhost(ghostId, session);
+      return session;
+    } catch (err) {
+      console.error('Failed to relaunch session:', err);
+      throw err;
+    }
+  }
+
   return {
     createSession,
     createStructuredSession,
@@ -110,5 +139,6 @@ export function useSession() {
     killStructuredSession,
     writeToSession,
     resizeSession,
+    relaunchSession,
   };
 }

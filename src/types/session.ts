@@ -10,6 +10,7 @@ export interface SessionInfo {
   status: SessionStatus;
   created_at: number;
   position: { x: number; y: number };
+  isGhost?: boolean;
 }
 
 export interface CreateSessionRequest {

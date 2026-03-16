@@ -1,11 +1,16 @@
 import { useState, useCallback } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSession } from '../hooks/useSession';
+import { useFavoritesStore } from '../stores/favoritesStore';
 import type { ToolType } from '../types/session';
 
 export default function NewSessionDialog() {
   const setShowNewDialog = useSessionStore((s) => s.setShowNewDialog);
   const { createSession } = useSession();
+  const favorites = useFavoritesStore((s) => s.favorites);
+  const addFavorite = useFavoritesStore((s) => s.addFavorite);
+  const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
+  const isFavorited = useFavoritesStore((s) => s.isFavorited);
   const [tool, setTool] = useState<ToolType>('claude');
   const [cwd, setCwd] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -50,6 +55,38 @@ export default function NewSessionDialog() {
       <div className="new-session-dialog">
         <h2 className="dialog-title">New Session</h2>
 
+        {/* Favorites */}
+        {favorites.length > 0 && (
+          <div className="favorites-section">
+            <label className="dialog-label">Favorites</label>
+            <div className="favorites-chips">
+              {favorites.map((fav) => (
+                <button
+                  key={fav.id}
+                  className="favorite-chip"
+                  onClick={() => {
+                    setTool(fav.tool);
+                    setCwd(fav.cwd);
+                  }}
+                  title={fav.cwd}
+                >
+                  <span className={`fav-dot ${fav.tool}`} />
+                  <span className="fav-label">{fav.label}</span>
+                  <span
+                    className="fav-remove"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFavorite(fav.id);
+                    }}
+                  >
+                    &times;
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Tool selector */}
         <div className="tool-cards">
           <div
@@ -82,6 +119,15 @@ export default function NewSessionDialog() {
             <button className="dialog-browse-btn" onClick={handleBrowse}>
               Browse
             </button>
+            {cwd.trim() && !isFavorited(tool, cwd.trim()) && (
+              <button
+                className="dialog-browse-btn fav-save"
+                onClick={() => addFavorite(tool, cwd.trim())}
+                title="Save as favorite"
+              >
+                ★
+              </button>
+            )}
           </div>
         </div>
 

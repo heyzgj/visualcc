@@ -2,6 +2,56 @@ import { create } from 'zustand';
 import type { SessionInfo, ToolType, SessionStatus } from '../types/session';
 import type { ChatEvent, RenderMode } from '../adapters/types';
 
+const PERSIST_KEY = 'visualcc-sessions';
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+interface PersistedSession {
+  tool: ToolType;
+  cwd: string;
+  label: string;
+  position: { x: number; y: number };
+  tileSize: { width: number; height: number };
+}
+
+function loadPersistedSessions(): SessionInfo[] {
+  try {
+    const saved = localStorage.getItem(PERSIST_KEY);
+    if (!saved) return [];
+    const items: PersistedSession[] = JSON.parse(saved);
+    return items.map((item, i) => ({
+      id: `ghost-${i}-${Date.now()}`,
+      tool: item.tool,
+      cwd: item.cwd,
+      label: item.label,
+      status: 'done' as SessionStatus,
+      created_at: Date.now(),
+      position: item.position,
+      isGhost: true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function persistSessions(sessions: SessionInfo[], tileSizes: Record<string, { width: number; height: number }>) {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    const live = sessions.filter((s) => !s.isGhost);
+    if (live.length === 0 && sessions.filter((s) => s.isGhost).length > 0) {
+      // Don't overwrite persisted data if we only have ghosts
+      return;
+    }
+    const data: PersistedSession[] = live.map((s) => ({
+      tool: s.tool,
+      cwd: s.cwd,
+      label: s.label,
+      position: s.position,
+      tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
+    }));
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+  }, 500);
+}
+
 interface SessionStore {
   sessions: SessionInfo[];
   showNewDialog: boolean;
@@ -12,6 +62,8 @@ interface SessionStore {
 
   addSession: (session: SessionInfo) => void;
   removeSession: (id: string) => void;
+  removeGhost: (id: string) => void;
+  relaunchGhost: (ghostId: string, newSession: SessionInfo) => void;
   updateStatus: (id: string, status: SessionStatus) => void;
   updatePosition: (id: string, x: number, y: number) => void;
   updateTileSize: (id: string, width: number, height: number) => void;
@@ -22,22 +74,39 @@ interface SessionStore {
   resetParseErrors: (id: string) => void;
 }
 
-export const useSessionStore = create<SessionStore>((set) => ({
-  sessions: [],
+// Load ghost tiles from localStorage on startup
+const initialGhosts = loadPersistedSessions();
+const initialTileSizes: Record<string, { width: number; height: number }> = {};
+try {
+  const saved = localStorage.getItem(PERSIST_KEY);
+  if (saved) {
+    const items: PersistedSession[] = JSON.parse(saved);
+    initialGhosts.forEach((ghost, i) => {
+      initialTileSizes[ghost.id] = items[i]?.tileSize ?? { width: 560, height: 420 };
+    });
+  }
+} catch {}
+
+export const useSessionStore = create<SessionStore>((set, get) => ({
+  sessions: initialGhosts,
   showNewDialog: false,
   messages: {},
   renderModes: {},
   parseErrors: {},
-  tileSizes: {},
+  tileSizes: initialTileSizes,
 
   addSession: (session) =>
-    set((state) => ({
-      sessions: [...state.sessions, session],
-      messages: { ...state.messages, [session.id]: [] },
-      renderModes: { ...state.renderModes, [session.id]: 'chat' },
-      parseErrors: { ...state.parseErrors, [session.id]: 0 },
-      tileSizes: { ...state.tileSizes, [session.id]: { width: 560, height: 420 } },
-    })),
+    set((state) => {
+      const next = {
+        sessions: [...state.sessions, session],
+        messages: { ...state.messages, [session.id]: [] },
+        renderModes: { ...state.renderModes, [session.id]: 'chat' },
+        parseErrors: { ...state.parseErrors, [session.id]: 0 },
+        tileSizes: { ...state.tileSizes, [session.id]: { width: 560, height: 420 } },
+      };
+      persistSessions(next.sessions, next.tileSizes);
+      return next;
+    }),
 
   removeSession: (id) =>
     set((state) => {
@@ -45,13 +114,42 @@ export const useSessionStore = create<SessionStore>((set) => ({
       const { [id]: _mode, ...restModes } = state.renderModes;
       const { [id]: _errs, ...restErrors } = state.parseErrors;
       const { [id]: _size, ...restSizes } = state.tileSizes;
-      return {
+      const next = {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages: restMessages,
         renderModes: restModes,
         parseErrors: restErrors,
         tileSizes: restSizes,
       };
+      persistSessions(next.sessions, next.tileSizes);
+      return next;
+    }),
+
+  removeGhost: (id) =>
+    set((state) => {
+      const { [id]: _size, ...restSizes } = state.tileSizes;
+      return {
+        sessions: state.sessions.filter((s) => s.id !== id),
+        tileSizes: restSizes,
+      };
+    }),
+
+  relaunchGhost: (ghostId, newSession) =>
+    set((state) => {
+      const ghost = state.sessions.find((s) => s.id === ghostId);
+      const ghostTileSize = state.tileSizes[ghostId] ?? { width: 560, height: 420 };
+      const { [ghostId]: _size, ...restSizes } = state.tileSizes;
+      const next = {
+        sessions: state.sessions
+          .filter((s) => s.id !== ghostId)
+          .concat({ ...newSession, position: ghost?.position ?? newSession.position }),
+        messages: { ...state.messages, [newSession.id]: [] },
+        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' },
+        parseErrors: { ...state.parseErrors, [newSession.id]: 0 },
+        tileSizes: { ...restSizes, [newSession.id]: ghostTileSize },
+      };
+      persistSessions(next.sessions, next.tileSizes);
+      return next;
     }),
 
   updateStatus: (id, status) =>
@@ -62,16 +160,24 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
 
   updatePosition: (id, x, y) =>
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, position: { x, y } } : s
-      ),
-    })),
+    set((state) => {
+      const next = {
+        sessions: state.sessions.map((s) =>
+          s.id === id ? { ...s, position: { x, y } } : s
+        ),
+      };
+      persistSessions(next.sessions, state.tileSizes);
+      return next;
+    }),
 
   updateTileSize: (id, width, height) =>
-    set((state) => ({
-      tileSizes: { ...state.tileSizes, [id]: { width, height } },
-    })),
+    set((state) => {
+      const next = {
+        tileSizes: { ...state.tileSizes, [id]: { width, height } },
+      };
+      persistSessions(state.sessions, next.tileSizes);
+      return next;
+    }),
 
   setShowNewDialog: (show) => set({ showNewDialog: show }),
 

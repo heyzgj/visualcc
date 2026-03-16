@@ -17,6 +17,7 @@ interface SessionNodeData extends SessionInfo {
   zoomTier: ZoomTier;
   renderMode: RenderMode;
   tileSize: { width: number; height: number };
+  isGhost?: boolean;
 }
 
 const STATUS_LABELS: Record<SessionStatus, string> = {
@@ -97,11 +98,16 @@ function SessionNodeComponent({ data }: NodeProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
-  const { killSession, killStructuredSession, writeToSession, resizeSession } = useSession();
+  const { killSession, killStructuredSession, writeToSession, resizeSession, relaunchSession } = useSession();
+  const removeGhost = useSessionStore((s) => s.removeGhost);
   const theme = useThemeStore((s) => s.theme);
+  const isGhost = nodeData.isGhost === true;
   const isCompact = nodeData.zoomTier === 'compact';
-  const isChatMode = nodeData.renderMode === 'chat';
-  const isTerminalMode = nodeData.renderMode === 'terminal';
+  const isThumbnail = nodeData.zoomTier === 'thumbnail';
+  const isChatMode = !isGhost && nodeData.renderMode === 'chat';
+  const isTerminalMode = !isGhost && nodeData.renderMode === 'terminal';
+  // Only create xterm instances at interactive+ zoom to save memory
+  const shouldHaveTerminal = isTerminalMode && !isCompact && !isThumbnail;
 
   const tileSize = nodeData.tileSize ?? { width: 560, height: 420 };
   const [resizing, setResizing] = useState(false);
@@ -112,9 +118,9 @@ function SessionNodeComponent({ data }: NodeProps) {
     nodeData.tool
   );
 
-  // Initialize terminal ONCE — only for terminal mode sessions
+  // Create/dispose terminal based on zoom level — saves memory at low zoom
   useEffect(() => {
-    if (isChatMode || !termRef.current) return;
+    if (!shouldHaveTerminal || !termRef.current) return;
 
     const terminal = new Terminal({
       theme: theme === 'dark' ? DARK_THEME : LIGHT_THEME,
@@ -155,7 +161,7 @@ function SessionNodeComponent({ data }: NodeProps) {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [nodeData.id, isChatMode]);
+  }, [nodeData.id, shouldHaveTerminal]);
 
   // Update terminal theme when app theme changes.
   // Must refresh all rows after setting theme — xterm's canvas renderer
@@ -167,9 +173,9 @@ function SessionNodeComponent({ data }: NodeProps) {
     term.refresh(0, term.rows - 1);
   }, [theme]);
 
-  // Refit on container size changes (terminal mode only)
+  // Refit on container size changes (only when terminal exists)
   useEffect(() => {
-    if (isChatMode || !fitAddonRef.current || !termRef.current) return;
+    if (!shouldHaveTerminal || !fitAddonRef.current || !termRef.current) return;
     const observer = new ResizeObserver(() => {
       try {
         fitAddonRef.current?.fit();
@@ -179,10 +185,10 @@ function SessionNodeComponent({ data }: NodeProps) {
     });
     observer.observe(termRef.current);
     return () => observer.disconnect();
-  }, [isChatMode]);
+  }, [shouldHaveTerminal]);
 
-  // Listen to PTY output (terminal mode only)
-  usePtyOutput(isTerminalMode ? nodeData.id : '', terminalRef.current);
+  // Listen to PTY output (only when terminal instance exists)
+  usePtyOutput(shouldHaveTerminal ? nodeData.id : '', terminalRef.current);
 
   // Stop wheel events from propagating to ReactFlow's d3-zoom.
   // MUST be a native DOM listener — React synthetic onWheel fires after
@@ -202,12 +208,22 @@ function SessionNodeComponent({ data }: NodeProps) {
   }, []);
 
   const handleClose = useCallback(async () => {
-    if (isChatMode) {
+    if (isGhost) {
+      removeGhost(nodeData.id);
+    } else if (isChatMode) {
       await killStructuredSession(nodeData.id);
     } else {
       await killSession(nodeData.id);
     }
-  }, [nodeData.id, isChatMode, killSession, killStructuredSession]);
+  }, [nodeData.id, isGhost, isChatMode, killSession, killStructuredSession, removeGhost]);
+
+  const handleRelaunch = useCallback(async () => {
+    try {
+      await relaunchSession(nodeData.id);
+    } catch {
+      // Error already logged in relaunchSession
+    }
+  }, [nodeData.id, relaunchSession]);
 
   // Resize handle drag
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -253,11 +269,9 @@ function SessionNodeComponent({ data }: NodeProps) {
         .slice(0, 200)
     : '';
 
-  const isThumbnail = nodeData.zoomTier === 'thumbnail';
-
   return (
     <div
-      className={`session-node ${resizing ? 'resizing' : ''}`}
+      className={`session-node ${resizing ? 'resizing' : ''} ${isGhost ? 'session-node--ghost' : ''}`}
       data-status={nodeData.status}
       ref={nodeRef}
       style={{ width: tileSize.width, height: tileSize.height }}
@@ -269,14 +283,36 @@ function SessionNodeComponent({ data }: NodeProps) {
         <div className={`tool-icon ${nodeData.tool}`} />
         <span className="session-label">{toolLabel}</span>
         <span className="session-path">{shortPath}</span>
-        <button className="close-btn" onClick={handleClose} title="Kill session">
+        <button className="close-btn" onClick={handleClose} title={isGhost ? 'Dismiss' : 'Kill session'}>
           &times;
         </button>
       </div>
 
       {/* Content area */}
       <div className="tile-content-wrapper">
-        {isCompact ? (
+        {isGhost ? (
+          <div className="tile-ghost">
+            <div
+              className="ghost-icon"
+              style={{
+                background:
+                  nodeData.tool === 'claude'
+                    ? 'rgba(217, 119, 87, 0.1)'
+                    : 'rgba(176, 174, 165, 0.1)',
+                color:
+                  nodeData.tool === 'claude'
+                    ? 'var(--status-active)'
+                    : 'var(--text-secondary)',
+              }}
+            >
+              {nodeData.tool === 'claude' ? 'C' : 'X'}
+            </div>
+            <div className="ghost-label">Previous session</div>
+            <button className="ghost-relaunch-btn" onClick={handleRelaunch}>
+              Re-launch
+            </button>
+          </div>
+        ) : isCompact ? (
           <div className="tile-compact">
             <div
               className="compact-icon"
@@ -303,27 +339,42 @@ function SessionNodeComponent({ data }: NodeProps) {
           </div>
         ) : isChatMode ? (
           <ChatView sessionId={nodeData.id} tool={nodeData.tool} />
+        ) : shouldHaveTerminal ? (
+          <div className="tile-terminal" ref={termRef} />
         ) : (
-          <div
-            className="tile-terminal"
-            ref={termRef}
-            style={{ display: isCompact ? 'none' : undefined }}
-          />
+          <div className="tile-compact">
+            <div
+              className="compact-icon"
+              style={{
+                background:
+                  nodeData.tool === 'claude'
+                    ? 'rgba(217, 119, 87, 0.15)'
+                    : 'rgba(176, 174, 165, 0.15)',
+                color:
+                  nodeData.tool === 'claude'
+                    ? 'var(--status-active)'
+                    : 'var(--text-secondary)',
+              }}
+            >
+              {nodeData.tool === 'claude' ? 'C' : 'X'}
+            </div>
+            <div className="compact-label">{nodeData.label}</div>
+            {isThumbnail && <div className="compact-hint">Zoom in to interact</div>}
+          </div>
         )}
       </div>
 
-      {/* Terminal ref for terminal mode (needs to be always in DOM) */}
-      {isTerminalMode && isCompact && (
-        <div className="tile-terminal" ref={termRef} style={{ display: 'none' }} />
-      )}
-
       {/* Footer */}
       <div className="tile-footer">
-        <span className="session-timer">{formatDuration(elapsed)}</span>
+        {isGhost ? (
+          <span className="session-timer ghost-hint">Saved session</span>
+        ) : (
+          <span className="session-timer">{formatDuration(elapsed)}</span>
+        )}
         <div className="status-badge">
           <span className={`status-dot ${nodeData.status}`} />
           <span style={{ color: `var(--status-${nodeData.status === 'done' ? 'idle' : nodeData.status})` }}>
-            {STATUS_LABELS[nodeData.status]}
+            {isGhost ? 'Ghost' : STATUS_LABELS[nodeData.status]}
           </span>
         </div>
       </div>
