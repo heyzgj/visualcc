@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -23,8 +23,24 @@ export default function Canvas() {
   const renderModes = useSessionStore((s) => s.renderModes);
   const tileSizes = useSessionStore((s) => s.tileSizes);
   const updatePosition = useSessionStore((s) => s.updatePosition);
-  const { zoom, tier, onViewportChange } = useZoomLevel();
-  const { fitView } = useReactFlow();
+  const { zoom, tier, defaultViewport, onViewportChange } = useZoomLevel();
+  const { fitView, setCenter } = useReactFlow();
+
+  // Escape key → zoom to fit all sessions
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const currentSessions = useSessionStore.getState().sessions;
+        if (currentSessions.length > 0) {
+          fitView({ padding: 0.15, duration: 400 });
+        } else {
+          setCenter(400, 300, { zoom: 1, duration: 300 });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fitView, setCenter]);
 
   // Double-click a tile → zoom to fill it
   const onNodeDoubleClick = useCallback(
@@ -90,7 +106,7 @@ export default function Canvas() {
         onNodeDoubleClick={onNodeDoubleClick}
         onViewportChange={onViewportChange}
         fitView={false}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        defaultViewport={defaultViewport}
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={null}
