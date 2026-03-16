@@ -157,11 +157,14 @@ function SessionNodeComponent({ data }: NodeProps) {
     };
   }, [nodeData.id, isChatMode]);
 
-  // Update terminal theme when app theme changes
+  // Update terminal theme when app theme changes.
+  // Must refresh all rows after setting theme — xterm's canvas renderer
+  // caches glyph textures with the old colors and won't repaint without it.
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.theme = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
-    }
+    const term = terminalRef.current;
+    if (!term) return;
+    term.options.theme = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+    term.refresh(0, term.rows - 1);
   }, [theme]);
 
   // Refit on container size changes (terminal mode only)
@@ -181,9 +184,21 @@ function SessionNodeComponent({ data }: NodeProps) {
   // Listen to PTY output (terminal mode only)
   usePtyOutput(isTerminalMode ? nodeData.id : '', terminalRef.current);
 
-  // Stop wheel events inside terminal/chat from propagating to canvas
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.stopPropagation();
+  // Stop wheel events from propagating to ReactFlow's d3-zoom.
+  // MUST be a native DOM listener — React synthetic onWheel fires after
+  // d3-zoom's native listener (delegated to root), so stopPropagation
+  // via React is too late. Native listener on .session-node fires during
+  // bubbling BEFORE the event reaches the ReactFlow pane.
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node) return;
+
+    const stopWheel = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+
+    node.addEventListener('wheel', stopWheel, { passive: true });
+    return () => node.removeEventListener('wheel', stopWheel);
   }, []);
 
   const handleClose = useCallback(async () => {
@@ -259,8 +274,8 @@ function SessionNodeComponent({ data }: NodeProps) {
         </button>
       </div>
 
-      {/* Content area — stop scroll from propagating to canvas */}
-      <div className="tile-content-wrapper" onWheel={handleWheel}>
+      {/* Content area */}
+      <div className="tile-content-wrapper">
         {isCompact ? (
           <div className="tile-compact">
             <div

@@ -4,6 +4,7 @@ import {
   Background,
   BackgroundVariant,
   MiniMap,
+  useReactFlow,
   type Node,
   type NodeChange,
   applyNodeChanges,
@@ -23,6 +24,15 @@ export default function Canvas() {
   const tileSizes = useSessionStore((s) => s.tileSizes);
   const updatePosition = useSessionStore((s) => s.updatePosition);
   const { zoom, tier, onViewportChange } = useZoomLevel();
+  const { fitView } = useReactFlow();
+
+  // Double-click a tile → zoom to fill it
+  const onNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      fitView({ nodes: [{ id: node.id }], padding: 0.3, duration: 400 });
+    },
+    [fitView]
+  );
 
   const nodes: Node[] = useMemo(
     () =>
@@ -77,6 +87,7 @@ export default function Canvas() {
         edges={[]}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onNodeDoubleClick={onNodeDoubleClick}
         onViewportChange={onViewportChange}
         fitView={false}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
@@ -97,15 +108,35 @@ export default function Canvas() {
         />
         <MiniMap
           nodeColor={minimapNodeColor}
-          maskColor="rgba(217, 119, 87, 0.08)"
+          nodeStrokeWidth={1.5}
+          nodeBorderRadius={4}
+          maskColor="rgba(217, 119, 87, 0.06)"
           style={{
-            background: 'rgba(28, 28, 26, 0.8)',
+            background: 'rgba(28, 28, 26, 0.85)',
             borderRadius: 12,
+            width: 180,
+            height: 120,
           }}
           pannable
           zoomable
         />
       </ReactFlow>
+
+      {/* Status summary — sits above minimap */}
+      {sessions.length > 0 && (
+        <div className="status-summary">
+          {(['running', 'active', 'idle', 'error', 'done'] as const).map((status) => {
+            const count = sessions.filter((s) => s.status === status).length;
+            if (count === 0) return null;
+            return (
+              <div key={status} className="status-summary-item">
+                <span className={`status-summary-dot ${status}`} />
+                <span className="status-summary-count">{count}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Zoom indicator */}
       <div className="zoom-indicator">{Math.round(zoom * 100)}%</div>

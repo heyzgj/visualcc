@@ -34,17 +34,82 @@
 
 /* Minimap styling */
 .react-flow__minimap {
-  background: rgba(28, 28, 26, 0.8) !important;
-  backdrop-filter: blur(12px);
+  background: rgba(28, 28, 26, 0.85) !important;
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle) !important;
   border-radius: var(--radius-md) !important;
   overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .react-flow__minimap-mask {
-  fill: rgba(217, 119, 87, 0.08) !important;
-  stroke: var(--status-active) !important;
-  stroke-width: 1 !important;
+  fill: rgba(217, 119, 87, 0.06) !important;
+  stroke: rgba(217, 119, 87, 0.4) !important;
+  stroke-width: 1.5 !important;
+  rx: 4 !important;
+}
+
+.react-flow__minimap-node {
+  stroke: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Status summary — above minimap */
+.status-summary {
+  position: fixed;
+  bottom: 140px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  background: rgba(28, 28, 26, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 5px 12px;
+  z-index: 10;
+  user-select: none;
+}
+
+.status-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-summary-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-summary-dot.running {
+  background: var(--status-running);
+  box-shadow: 0 0 6px rgba(106, 155, 204, 0.4);
+}
+
+.status-summary-dot.active {
+  background: var(--status-active);
+  box-shadow: 0 0 6px rgba(217, 119, 87, 0.4);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+.status-summary-dot.idle { background: var(--status-idle); }
+.status-summary-dot.error {
+  background: var(--status-error);
+  box-shadow: 0 0 6px rgba(196, 68, 58, 0.4);
+}
+.status-summary-dot.done { background: var(--text-muted); }
+
+.status-summary-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* Edge styling (if we add connections later) */
@@ -84,8 +149,13 @@
 
 /* === Light theme overrides === */
 :root[data-theme="light"] .react-flow__minimap {
-  background: rgba(255, 255, 255, 0.85) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .status-summary {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 :root[data-theme="light"] .zoom-indicator {
