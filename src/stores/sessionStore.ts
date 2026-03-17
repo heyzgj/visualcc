@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SessionInfo, ToolType, SessionStatus } from '../types/session';
+import type { SessionInfo, ToolType, SessionStatus, SessionIntel } from '../types/session';
 import type { ChatEvent, RenderMode } from '../adapters/types';
 
 const PERSIST_KEY = 'visualcc-sessions';
@@ -11,6 +11,8 @@ interface PersistedSession {
   label: string;
   position: { x: number; y: number };
   tileSize: { width: number; height: number };
+  taskTitle?: string;
+  previewUrl?: string;
 }
 
 function loadPersistedSessions(): SessionInfo[] {
@@ -27,6 +29,8 @@ function loadPersistedSessions(): SessionInfo[] {
       created_at: Date.now(),
       position: item.position,
       isGhost: true,
+      taskTitle: item.taskTitle,
+      previewUrl: item.previewUrl,
     }));
   } catch {
     return [];
@@ -47,6 +51,8 @@ function persistSessions(sessions: SessionInfo[], tileSizes: Record<string, { wi
       label: s.label,
       position: s.position,
       tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
+      taskTitle: s.taskTitle,
+      previewUrl: s.previewUrl,
     }));
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
   }, 500);
@@ -59,6 +65,7 @@ interface SessionStore {
   renderModes: Record<string, RenderMode>;
   parseErrors: Record<string, number>;
   tileSizes: Record<string, { width: number; height: number }>;
+  sessionIntel: Record<string, SessionIntel>;
 
   addSession: (session: SessionInfo) => void;
   removeSession: (id: string) => void;
@@ -72,6 +79,7 @@ interface SessionStore {
   setRenderMode: (id: string, mode: RenderMode) => void;
   incrementParseErrors: (id: string) => void;
   resetParseErrors: (id: string) => void;
+  updateIntel: (id: string, intel: Partial<SessionIntel>) => void;
 }
 
 // Load ghost tiles from localStorage on startup
@@ -94,13 +102,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   renderModes: {},
   parseErrors: {},
   tileSizes: initialTileSizes,
+  sessionIntel: {},
 
   addSession: (session) =>
     set((state) => {
       const next = {
         sessions: [...state.sessions, session],
-        messages: { ...state.messages, [session.id]: [] },
-        renderModes: { ...state.renderModes, [session.id]: 'chat' },
+        messages: { ...state.messages, [session.id]: [] as ChatEvent[] },
+        renderModes: { ...state.renderModes, [session.id]: 'chat' as RenderMode },
         parseErrors: { ...state.parseErrors, [session.id]: 0 },
         tileSizes: { ...state.tileSizes, [session.id]: { width: 560, height: 420 } },
       };
@@ -114,12 +123,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const { [id]: _mode, ...restModes } = state.renderModes;
       const { [id]: _errs, ...restErrors } = state.parseErrors;
       const { [id]: _size, ...restSizes } = state.tileSizes;
+      const { [id]: _intel, ...restIntel } = state.sessionIntel;
       const next = {
         sessions: state.sessions.filter((s) => s.id !== id),
         messages: restMessages,
         renderModes: restModes,
         parseErrors: restErrors,
         tileSizes: restSizes,
+        sessionIntel: restIntel,
       };
       persistSessions(next.sessions, next.tileSizes);
       return next;
@@ -143,8 +154,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         sessions: state.sessions
           .filter((s) => s.id !== ghostId)
           .concat({ ...newSession, position: ghost?.position ?? newSession.position }),
-        messages: { ...state.messages, [newSession.id]: [] },
-        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' },
+        messages: { ...state.messages, [newSession.id]: [] as ChatEvent[] },
+        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' as RenderMode },
         parseErrors: { ...state.parseErrors, [newSession.id]: 0 },
         tileSizes: { ...restSizes, [newSession.id]: ghostTileSize },
       };
@@ -205,6 +216,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   resetParseErrors: (id) =>
     set((state) => ({
       parseErrors: { ...state.parseErrors, [id]: 0 },
+    })),
+
+  updateIntel: (id, intel) =>
+    set((state) => ({
+      sessionIntel: {
+        ...state.sessionIntel,
+        [id]: { ...(state.sessionIntel[id] ?? { lastActivity: '', detectedUrl: null, pendingQuestion: null, outcome: null }), ...intel },
+      },
     })),
 }));
 

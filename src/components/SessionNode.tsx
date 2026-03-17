@@ -8,10 +8,16 @@ import { useStructuredOutput } from '../hooks/useStructuredOutput';
 import { useSession } from '../hooks/useSession';
 import { useSessionStore } from '../stores/sessionStore';
 import ChatView from './ChatView';
-import type { SessionInfo, SessionStatus } from '../types/session';
+import PreviewPane from './PreviewPane';
+import MarkdownPreview from './MarkdownPreview';
+import QuestionCard from './QuestionCard';
+import OutcomeCard from './OutcomeCard';
+import type { SessionInfo, SessionStatus, SessionIntel } from '../types/session';
 import type { RenderMode } from '../adapters/types';
 import type { ZoomTier } from '../hooks/useZoomLevel';
 import { useThemeStore } from '../stores/themeStore';
+
+type TileViewMode = 'auto' | 'terminal' | 'preview';
 
 interface SessionNodeData extends SessionInfo {
   zoomTier: ZoomTier;
@@ -83,6 +89,13 @@ const MIN_HEIGHT = 240;
 const MAX_WIDTH = 1200;
 const MAX_HEIGHT = 900;
 
+const EMPTY_INTEL: SessionIntel = {
+  lastActivity: '',
+  detectedUrl: null,
+  pendingQuestion: null,
+  outcome: null,
+};
+
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -101,16 +114,38 @@ function SessionNodeComponent({ data }: NodeProps) {
   const { killSession, killStructuredSession, writeToSession, resizeSession, relaunchSession } = useSession();
   const removeGhost = useSessionStore((s) => s.removeGhost);
   const theme = useThemeStore((s) => s.theme);
+  const intel = useSessionStore((s) => s.sessionIntel[nodeData.id]) ?? EMPTY_INTEL;
   const isGhost = nodeData.isGhost === true;
   const isCompact = nodeData.zoomTier === 'compact';
   const isThumbnail = nodeData.zoomTier === 'thumbnail';
   const isChatMode = !isGhost && nodeData.renderMode === 'chat';
   const isTerminalMode = !isGhost && nodeData.renderMode === 'terminal';
-  // Only create xterm instances at interactive+ zoom to save memory
-  const shouldHaveTerminal = isTerminalMode && !isCompact && !isThumbnail;
+  const isDone = nodeData.status === 'done' || nodeData.status === 'error';
+
+  // View mode: auto picks best view, user can toggle to terminal
+  const [viewMode, setViewMode] = useState<TileViewMode>('auto');
+
+  // Determine preview URL (configured > auto-detected)
+  const previewUrl = nodeData.previewUrl || intel.detectedUrl;
+
+  // Determine if we should show terminal (user forced or no preview available)
+  const isInteractive = !isCompact && !isThumbnail;
+  const showTerminal = isInteractive && isTerminalMode && (
+    viewMode === 'terminal' || (viewMode === 'auto' && !previewUrl)
+  );
+  const showPreview = isInteractive && !isGhost && viewMode !== 'terminal' && previewUrl && !isDone;
+  const showMarkdown = isInteractive && isChatMode && viewMode !== 'terminal' && !previewUrl && !isDone;
+
+  // Only create xterm instances when we need to show the terminal
+  const shouldHaveTerminal = showTerminal && !isGhost;
 
   const tileSize = nodeData.tileSize ?? { width: 560, height: 420 };
   const [resizing, setResizing] = useState(false);
+
+  // Display name: taskTitle > label
+  const displayTitle = nodeData.taskTitle || nodeData.label;
+  const toolLabel = nodeData.tool === 'claude' ? 'Claude Code' : 'Codex';
+  const shortPath = nodeData.cwd.replace(/^\/Users\/[^/]+/, '~');
 
   // Listen to structured output for chat mode sessions
   useStructuredOutput(
@@ -118,7 +153,7 @@ function SessionNodeComponent({ data }: NodeProps) {
     nodeData.tool
   );
 
-  // Create/dispose terminal based on zoom level — saves memory at low zoom
+  // Create/dispose terminal based on whether we need it
   useEffect(() => {
     if (!shouldHaveTerminal || !termRef.current) return;
 
@@ -163,9 +198,7 @@ function SessionNodeComponent({ data }: NodeProps) {
     };
   }, [nodeData.id, shouldHaveTerminal]);
 
-  // Update terminal theme when app theme changes.
-  // Must refresh all rows after setting theme — xterm's canvas renderer
-  // caches glyph textures with the old colors and won't repaint without it.
+  // Update terminal theme
   useEffect(() => {
     const term = terminalRef.current;
     if (!term) return;
@@ -173,7 +206,7 @@ function SessionNodeComponent({ data }: NodeProps) {
     term.refresh(0, term.rows - 1);
   }, [theme]);
 
-  // Refit on container size changes (only when terminal exists)
+  // Refit on container size changes
   useEffect(() => {
     if (!shouldHaveTerminal || !fitAddonRef.current || !termRef.current) return;
     const observer = new ResizeObserver(() => {
@@ -187,22 +220,14 @@ function SessionNodeComponent({ data }: NodeProps) {
     return () => observer.disconnect();
   }, [shouldHaveTerminal]);
 
-  // Listen to PTY output (only when terminal instance exists)
+  // Listen to PTY output
   usePtyOutput(shouldHaveTerminal ? nodeData.id : '', terminalRef.current);
 
-  // Stop wheel events from propagating to ReactFlow's d3-zoom.
-  // MUST be a native DOM listener — React synthetic onWheel fires after
-  // d3-zoom's native listener (delegated to root), so stopPropagation
-  // via React is too late. Native listener on .session-node fires during
-  // bubbling BEFORE the event reaches the ReactFlow pane.
+  // Stop wheel events from leaking to d3-zoom
   useEffect(() => {
     const node = nodeRef.current;
     if (!node) return;
-
-    const stopWheel = (e: WheelEvent) => {
-      e.stopPropagation();
-    };
-
+    const stopWheel = (e: WheelEvent) => { e.stopPropagation(); };
     node.addEventListener('wheel', stopWheel, { passive: true });
     return () => node.removeEventListener('wheel', stopWheel);
   }, []);
@@ -221,53 +246,196 @@ function SessionNodeComponent({ data }: NodeProps) {
     try {
       await relaunchSession(nodeData.id);
     } catch {
-      // Error already logged in relaunchSession
+      // Error already logged
     }
   }, [nodeData.id, relaunchSession]);
 
-  // Resize handle drag
+  const switchToTerminal = useCallback(() => setViewMode('terminal'), []);
+  const switchToAuto = useCallback(() => setViewMode('auto'), []);
+
+  const handleDismissQuestion = useCallback(() => {
+    useSessionStore.getState().updateIntel(nodeData.id, { pendingQuestion: null });
+  }, [nodeData.id]);
+
+  // Resize handle
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setResizing(true);
-
     const startX = e.clientX;
     const startY = e.clientY;
     const startW = tileSize.width;
     const startH = tileSize.height;
-
     const onMouseMove = (ev: MouseEvent) => {
       const newW = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + (ev.clientX - startX)));
       const newH = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startH + (ev.clientY - startY)));
       useSessionStore.getState().updateTileSize(nodeData.id, newW, newH);
     };
-
     const onMouseUp = () => {
       setResizing(false);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     };
-
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }, [nodeData.id, tileSize.width, tileSize.height]);
 
   const elapsed = Date.now() - nodeData.created_at;
-  const toolLabel = nodeData.tool === 'claude' ? 'Claude Code' : 'Codex';
-  const shortPath = nodeData.cwd.replace(/^\/Users\/[^/]+/, '~');
 
-  // Get last message preview for thumbnail zoom
+  // Get markdown content for chat mode preview
   const messages = useSessionStore((s) => s.messages[nodeData.id] ?? []);
-  const lastTextMessage = messages
+  const markdownContent = messages
     .filter((m) => m.type === 'assistant_message')
-    .at(-1);
-  const previewText = lastTextMessage?.type === 'assistant_message'
-    ? lastTextMessage.blocks
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as { type: 'text'; text: string }).text)
-        .join(' ')
-        .slice(0, 200)
-    : '';
+    .flatMap((m) =>
+      m.type === 'assistant_message'
+        ? m.blocks.filter((b) => b.type === 'text').map((b) => (b as { type: 'text'; text: string }).text)
+        : []
+    )
+    .join('\n\n');
+
+  // --- Render ---
+
+  const renderContent = () => {
+    // Ghost tiles
+    if (isGhost) {
+      return (
+        <div className="tile-ghost">
+          <div className="ghost-icon" style={{
+            background: nodeData.tool === 'claude' ? 'rgba(217, 119, 87, 0.1)' : 'rgba(176, 174, 165, 0.1)',
+            color: nodeData.tool === 'claude' ? 'var(--status-active)' : 'var(--text-secondary)',
+          }}>
+            {nodeData.tool === 'claude' ? 'C' : 'X'}
+          </div>
+          {nodeData.taskTitle && <div className="ghost-task-title">{nodeData.taskTitle}</div>}
+          <div className="ghost-label">Previous session</div>
+          <button className="ghost-relaunch-btn" onClick={handleRelaunch}>Re-launch</button>
+        </div>
+      );
+    }
+
+    // Compact zoom (< 0.3) — icon + title + status
+    if (isCompact) {
+      return (
+        <div className="tile-compact">
+          <div className="compact-icon" style={{
+            background: nodeData.tool === 'claude' ? 'rgba(217, 119, 87, 0.15)' : 'rgba(176, 174, 165, 0.15)',
+            color: nodeData.tool === 'claude' ? 'var(--status-active)' : 'var(--text-secondary)',
+          }}>
+            {nodeData.tool === 'claude' ? 'C' : 'X'}
+          </div>
+          <div className="compact-label">{displayTitle}</div>
+          {intel.pendingQuestion && <div className="question-badge">⚠</div>}
+        </div>
+      );
+    }
+
+    // Thumbnail zoom (0.3-0.7) — smart card with subtitle + inline question
+    if (isThumbnail) {
+      return (
+        <div className="smart-card">
+          <div className="smart-card-title">{displayTitle}</div>
+          {intel.lastActivity && (
+            <div className="smart-card-subtitle">{intel.lastActivity}</div>
+          )}
+          {isDone && intel.outcome && (
+            <OutcomeCard outcome={intel.outcome} sessionId={nodeData.id} status={nodeData.status as 'done' | 'error'} />
+          )}
+          {intel.pendingQuestion && (
+            <QuestionCard
+              question={intel.pendingQuestion}
+              sessionId={nodeData.id}
+              onDismiss={handleDismissQuestion}
+              onSwitchToTerminal={switchToTerminal}
+              compact
+            />
+          )}
+          {!intel.lastActivity && !intel.pendingQuestion && !isDone && (
+            <div className="smart-card-waiting">Waiting for output...</div>
+          )}
+        </div>
+      );
+    }
+
+    // Interactive+ zoom (> 0.7) — preview or terminal
+    // Done state: show outcome
+    if (isDone && intel.outcome) {
+      return (
+        <div className="tile-done-wrapper">
+          <OutcomeCard outcome={intel.outcome} sessionId={nodeData.id} status={nodeData.status as 'done' | 'error'} />
+          {showTerminal && <div className="tile-terminal" ref={termRef} />}
+        </div>
+      );
+    }
+
+    // Live iframe preview
+    if (showPreview) {
+      return (
+        <>
+          <PreviewPane url={previewUrl!} sessionId={nodeData.id} onSwitchToTerminal={switchToTerminal} />
+          {intel.pendingQuestion && (
+            <QuestionCard
+              question={intel.pendingQuestion}
+              sessionId={nodeData.id}
+              onDismiss={handleDismissQuestion}
+              onSwitchToTerminal={switchToTerminal}
+            />
+          )}
+        </>
+      );
+    }
+
+    // Markdown preview (chat mode, no preview URL)
+    if (showMarkdown) {
+      return (
+        <>
+          {markdownContent ? (
+            <MarkdownPreview content={markdownContent} sessionId={nodeData.id} onSwitchToTerminal={switchToTerminal} />
+          ) : (
+            <ChatView sessionId={nodeData.id} tool={nodeData.tool} />
+          )}
+          {intel.pendingQuestion && (
+            <QuestionCard
+              question={intel.pendingQuestion}
+              sessionId={nodeData.id}
+              onDismiss={handleDismissQuestion}
+              onSwitchToTerminal={switchToTerminal}
+            />
+          )}
+        </>
+      );
+    }
+
+    // Terminal view (default for terminal mode or user toggle)
+    if (shouldHaveTerminal) {
+      return (
+        <>
+          <div className="tile-terminal" ref={termRef} />
+          {intel.pendingQuestion && (
+            <QuestionCard
+              question={intel.pendingQuestion}
+              sessionId={nodeData.id}
+              onDismiss={handleDismissQuestion}
+              onSwitchToTerminal={switchToTerminal}
+            />
+          )}
+        </>
+      );
+    }
+
+    // Fallback compact
+    return (
+      <div className="tile-compact">
+        <div className="compact-icon" style={{
+          background: nodeData.tool === 'claude' ? 'rgba(217, 119, 87, 0.15)' : 'rgba(176, 174, 165, 0.15)',
+          color: nodeData.tool === 'claude' ? 'var(--status-active)' : 'var(--text-secondary)',
+        }}>
+          {nodeData.tool === 'claude' ? 'C' : 'X'}
+        </div>
+        <div className="compact-label">{displayTitle}</div>
+        {isThumbnail && <div className="compact-hint">Zoom in to interact</div>}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -281,87 +449,34 @@ function SessionNodeComponent({ data }: NodeProps) {
       {/* Header */}
       <div className="tile-header">
         <div className={`tool-icon ${nodeData.tool}`} />
-        <span className="session-label">{toolLabel}</span>
-        <span className="session-path">{shortPath}</span>
+        <span className="session-label">{nodeData.taskTitle ? displayTitle : toolLabel}</span>
+        <span className="session-path">{nodeData.taskTitle ? toolLabel : shortPath}</span>
+        {/* View toggle (only at interactive+ zoom, not ghost, not done) */}
+        {isInteractive && !isGhost && !isDone && (
+          <button
+            className="tile-view-toggle"
+            onClick={viewMode === 'terminal' ? switchToAuto : switchToTerminal}
+            title={viewMode === 'terminal' ? 'Show preview' : 'Show terminal'}
+          >
+            {viewMode === 'terminal' ? '◫' : '⌨'}
+          </button>
+        )}
         <button className="close-btn" onClick={handleClose} title={isGhost ? 'Dismiss' : 'Kill session'}>
           &times;
         </button>
       </div>
 
+      {/* Smart subtitle (visible at interactive+ zoom when not in done state) */}
+      {isInteractive && !isGhost && !isDone && intel.lastActivity && (
+        <div className="tile-subtitle">
+          <span className={`status-dot-inline ${nodeData.status}`} />
+          {intel.lastActivity}
+        </div>
+      )}
+
       {/* Content area */}
       <div className="tile-content-wrapper">
-        {isGhost ? (
-          <div className="tile-ghost">
-            <div
-              className="ghost-icon"
-              style={{
-                background:
-                  nodeData.tool === 'claude'
-                    ? 'rgba(217, 119, 87, 0.1)'
-                    : 'rgba(176, 174, 165, 0.1)',
-                color:
-                  nodeData.tool === 'claude'
-                    ? 'var(--status-active)'
-                    : 'var(--text-secondary)',
-              }}
-            >
-              {nodeData.tool === 'claude' ? 'C' : 'X'}
-            </div>
-            <div className="ghost-label">Previous session</div>
-            <button className="ghost-relaunch-btn" onClick={handleRelaunch}>
-              Re-launch
-            </button>
-          </div>
-        ) : isCompact ? (
-          <div className="tile-compact">
-            <div
-              className="compact-icon"
-              style={{
-                background:
-                  nodeData.tool === 'claude'
-                    ? 'rgba(217, 119, 87, 0.15)'
-                    : 'rgba(176, 174, 165, 0.15)',
-                color:
-                  nodeData.tool === 'claude'
-                    ? 'var(--status-active)'
-                    : 'var(--text-secondary)',
-              }}
-            >
-              {nodeData.tool === 'claude' ? 'C' : 'X'}
-            </div>
-            <div className="compact-label">{nodeData.label}</div>
-          </div>
-        ) : isChatMode && isThumbnail ? (
-          <div className="chat-preview">
-            <div className="chat-preview-text">
-              {previewText || 'Waiting for output...'}
-            </div>
-          </div>
-        ) : isChatMode ? (
-          <ChatView sessionId={nodeData.id} tool={nodeData.tool} />
-        ) : shouldHaveTerminal ? (
-          <div className="tile-terminal" ref={termRef} />
-        ) : (
-          <div className="tile-compact">
-            <div
-              className="compact-icon"
-              style={{
-                background:
-                  nodeData.tool === 'claude'
-                    ? 'rgba(217, 119, 87, 0.15)'
-                    : 'rgba(176, 174, 165, 0.15)',
-                color:
-                  nodeData.tool === 'claude'
-                    ? 'var(--status-active)'
-                    : 'var(--text-secondary)',
-              }}
-            >
-              {nodeData.tool === 'claude' ? 'C' : 'X'}
-            </div>
-            <div className="compact-label">{nodeData.label}</div>
-            {isThumbnail && <div className="compact-hint">Zoom in to interact</div>}
-          </div>
-        )}
+        {renderContent()}
       </div>
 
       {/* Footer */}
@@ -380,10 +495,7 @@ function SessionNodeComponent({ data }: NodeProps) {
       </div>
 
       {/* Resize handle */}
-      <div
-        className="tile-resize-handle"
-        onMouseDown={handleResizeStart}
-      />
+      <div className="tile-resize-handle" onMouseDown={handleResizeStart} />
 
       <Handle type="source" position={Position.Bottom} style={{ display: 'none' }} />
     </div>

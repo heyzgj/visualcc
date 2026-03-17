@@ -14,6 +14,8 @@ export default function NewSessionDialog() {
   const [tool, setTool] = useState<ToolType>('claude');
   const [cwd, setCwd] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
   const [launching, setLaunching] = useState(false);
 
   const handleBrowse = useCallback(async () => {
@@ -34,6 +36,8 @@ export default function NewSessionDialog() {
         tool,
         cwd: cwd.trim(),
         initial_prompt: prompt.trim() || undefined,
+        taskTitle: taskTitle.trim() || undefined,
+        previewUrl: previewUrl.trim() || undefined,
       });
       setShowNewDialog(false);
     } catch (err) {
@@ -41,7 +45,7 @@ export default function NewSessionDialog() {
     } finally {
       setLaunching(false);
     }
-  }, [tool, cwd, prompt, createSession, setShowNewDialog]);
+  }, [tool, cwd, prompt, taskTitle, previewUrl, createSession, setShowNewDialog]);
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
@@ -131,6 +135,18 @@ export default function NewSessionDialog() {
           </div>
         </div>
 
+        {/* Task name */}
+        <div className="dialog-field">
+          <label className="dialog-label">Task Name <span className="dialog-optional">(optional)</span></label>
+          <input
+            className="dialog-input"
+            type="text"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            placeholder="What are you working on?"
+          />
+        </div>
+
         {/* Initial prompt */}
         <div className="dialog-field">
           <label className="dialog-label">Initial Prompt</label>
@@ -139,6 +155,18 @@ export default function NewSessionDialog() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g., Fix the failing tests in auth module"
+          />
+        </div>
+
+        {/* Preview URL */}
+        <div className="dialog-field">
+          <label className="dialog-label">Preview URL <span className="dialog-optional">(auto-detected)</span></label>
+          <input
+            className="dialog-input"
+            type="text"
+            value={previewUrl}
+            onChange={(e) => setPreviewUrl(e.target.value)}
+            placeholder="e.g., http://localhost:3000"
           />
         </div>
 

@@ -26,6 +26,8 @@ export function useSession() {
         status: 'running',
         created_at: Date.now(),
         position,
+        taskTitle: req.taskTitle,
+        previewUrl: req.previewUrl,
       };
 
       addSession(session);
