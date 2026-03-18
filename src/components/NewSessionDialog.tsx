@@ -1,16 +1,13 @@
 import { useState, useCallback } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSession } from '../hooks/useSession';
-import { useFavoritesStore } from '../stores/favoritesStore';
+import { useRecentsStore } from '../stores/recentsStore';
 import type { ToolType } from '../types/session';
 
 export default function NewSessionDialog() {
   const setShowNewDialog = useSessionStore((s) => s.setShowNewDialog);
   const { createSession } = useSession();
-  const favorites = useFavoritesStore((s) => s.favorites);
-  const addFavorite = useFavoritesStore((s) => s.addFavorite);
-  const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
-  const isFavorited = useFavoritesStore((s) => s.isFavorited);
+  const recents = useRecentsStore((s) => s.recents);
   const [tool, setTool] = useState<ToolType>('claude');
   const [cwd, setCwd] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -39,6 +36,8 @@ export default function NewSessionDialog() {
         taskTitle: taskTitle.trim() || undefined,
         previewUrl: previewUrl.trim() || undefined,
       });
+      // Track in recents
+      useRecentsStore.getState().addRecent(tool, cwd.trim());
       setShowNewDialog(false);
     } catch (err) {
       console.error('Launch failed:', err);
@@ -58,38 +57,6 @@ export default function NewSessionDialog() {
     <div className="dialog-overlay" onClick={handleOverlayClick}>
       <div className="new-session-dialog">
         <h2 className="dialog-title">New Session</h2>
-
-        {/* Favorites */}
-        {favorites.length > 0 && (
-          <div className="favorites-section">
-            <label className="dialog-label">Favorites</label>
-            <div className="favorites-chips">
-              {favorites.map((fav) => (
-                <button
-                  key={fav.id}
-                  className="favorite-chip"
-                  onClick={() => {
-                    setTool(fav.tool);
-                    setCwd(fav.cwd);
-                  }}
-                  title={fav.cwd}
-                >
-                  <span className={`fav-dot ${fav.tool}`} />
-                  <span className="fav-label">{fav.label}</span>
-                  <span
-                    className="fav-remove"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFavorite(fav.id);
-                    }}
-                  >
-                    &times;
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Tool selector */}
         <div className="tool-cards">
@@ -123,15 +90,6 @@ export default function NewSessionDialog() {
             <button className="dialog-browse-btn" onClick={handleBrowse}>
               Browse
             </button>
-            {cwd.trim() && !isFavorited(tool, cwd.trim()) && (
-              <button
-                className="dialog-browse-btn fav-save"
-                onClick={() => addFavorite(tool, cwd.trim())}
-                title="Save as favorite"
-              >
-                ★
-              </button>
-            )}
           </div>
         </div>
 
@@ -149,7 +107,7 @@ export default function NewSessionDialog() {
 
         {/* Initial prompt */}
         <div className="dialog-field">
-          <label className="dialog-label">Initial Prompt</label>
+          <label className="dialog-label">Initial Prompt <span className="dialog-optional">(optional)</span></label>
           <textarea
             className="dialog-textarea"
             value={prompt}
@@ -183,9 +141,33 @@ export default function NewSessionDialog() {
             onClick={handleLaunch}
             disabled={!cwd.trim() || launching}
           >
-            {launching ? 'Launching...' : 'Launch Session'}
+            {launching ? 'Launching...' : 'Launch'}
           </button>
         </div>
+
+        {/* Recent directories */}
+        {recents.length > 0 && (
+          <div className="recents-section">
+            <label className="dialog-label recents-label">Recent</label>
+            <div className="recents-list">
+              {recents.map((r, i) => (
+                <button
+                  key={`${r.cwd}-${i}`}
+                  className="recent-item"
+                  onClick={() => {
+                    setTool(r.tool);
+                    setCwd(r.cwd);
+                  }}
+                  title={r.cwd}
+                >
+                  <span className={`recent-dot ${r.tool}`} />
+                  <span className="recent-label">{r.label}</span>
+                  <span className="recent-path">{r.cwd.replace(/^\/Users\/[^/]+/, '~')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

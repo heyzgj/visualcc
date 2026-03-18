@@ -227,6 +227,25 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     })),
 }));
 
+// Flush persistence immediately on window close
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    const { sessions, tileSizes } = useSessionStore.getState();
+    const live = sessions.filter((s) => !s.isGhost);
+    if (live.length === 0) return;
+    const data: PersistedSession[] = live.map((s) => ({
+      tool: s.tool,
+      cwd: s.cwd,
+      label: s.label,
+      position: s.position,
+      tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
+      taskTitle: s.taskTitle,
+      previewUrl: s.previewUrl,
+    }));
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+  });
+}
+
 // Helper to get next available position on the canvas
 export function getNextPosition(sessions: SessionInfo[]): { x: number; y: number } {
   if (sessions.length === 0) return { x: 100, y: 100 };
