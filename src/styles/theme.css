@@ -38,7 +38,7 @@
 
 /* === Light Theme === */
 :root[data-theme="light"] {
-  --bg-deep: #f5f4f0;
+  --bg-deep: #faf9f5;
   --bg-surface: #ffffff;
   --bg-elevated: #eeedea;
   --text-primary: #141413;

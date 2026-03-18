@@ -41,22 +41,22 @@ const DARK_THEME = {
   cursorAccent: '#141413',
   selectionBackground: 'rgba(217, 119, 87, 0.3)',
   selectionForeground: '#faf9f5',
-  black: '#141413',
-  red: '#c4443a',
-  green: '#788c5d',
-  yellow: '#d97757',
-  blue: '#6a9bcc',
-  magenta: '#b0aea5',
-  cyan: '#6a9bcc',
+  black: '#2a2a27',        // Offset from bg so ANSI black (code blocks, reverse video) is visible
+  red: '#e06c5a',          // Brighter red for better readability
+  green: '#8aa06e',        // Brighter green
+  yellow: '#e0986a',       // Warmer, more visible yellow
+  blue: '#7dafdb',         // Brighter blue — Claude Code uses blue extensively
+  magenta: '#c4a0d0',      // Distinct purple instead of gray
+  cyan: '#7dc4c4',         // Teal instead of duplicating blue
   white: '#faf9f5',
   brightBlack: '#706f6a',
-  brightRed: '#d97757',
-  brightGreen: '#8aa06e',
-  brightYellow: '#e0986a',
-  brightBlue: '#7dafdb',
-  brightMagenta: '#c4bfb6',
-  brightCyan: '#7dafdb',
-  brightWhite: '#faf9f5',
+  brightRed: '#f08070',
+  brightGreen: '#a0b87e',
+  brightYellow: '#f0b080',
+  brightBlue: '#90c0e8',
+  brightMagenta: '#d4b0e0',
+  brightCyan: '#90d4d4',
+  brightWhite: '#ffffff',
 };
 
 const LIGHT_THEME = {
@@ -67,21 +67,21 @@ const LIGHT_THEME = {
   selectionBackground: 'rgba(217, 119, 87, 0.2)',
   selectionForeground: '#141413',
   black: '#141413',
-  red: '#c4443a',
-  green: '#5a6e42',
-  yellow: '#c06840',
-  blue: '#4a7eab',
-  magenta: '#8a877e',
-  cyan: '#4a7eab',
-  white: '#faf9f5',
-  brightBlack: '#706f6a',
-  brightRed: '#d97757',
-  brightGreen: '#788c5d',
-  brightYellow: '#d97757',
-  brightBlue: '#6a9bcc',
-  brightMagenta: '#b0aea5',
-  brightCyan: '#6a9bcc',
-  brightWhite: '#faf9f5',
+  red: '#b83a30',
+  green: '#4a6030',        // Darker green for light bg contrast
+  yellow: '#a85828',       // Darker warm orange
+  blue: '#2a6090',         // Darker blue for light bg readability
+  magenta: '#7a5090',      // Distinct purple
+  cyan: '#2a7878',         // Darker teal
+  white: '#e8e4d8',        // Offset from bg so ANSI white is visible (not identical to bg)
+  brightBlack: '#585550',
+  brightRed: '#c44838',
+  brightGreen: '#5a7040',
+  brightYellow: '#b86830',
+  brightBlue: '#3a70a0',
+  brightMagenta: '#8a60a0',
+  brightCyan: '#3a8888',
+  brightWhite: '#ede9e0',  // Still light but visibly different from #faf9f5 bg
 };
 
 const MIN_WIDTH = 360;
