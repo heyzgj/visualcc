@@ -3,7 +3,6 @@ import type {
   ChatEvent,
   ContentBlock,
   StderrEvent,
-  InputCapabilities,
 } from './types';
 
 // Codex CLI --json event shapes

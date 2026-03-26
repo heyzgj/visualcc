@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { SessionInfo, CreateSessionRequest } from '../types/session';
-import type { RenderMode } from '../adapters/types';
 import { useSessionStore, getNextPosition } from '../stores/sessionStore';
 
 export function useSession() {

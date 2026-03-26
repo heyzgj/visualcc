@@ -3,7 +3,6 @@ import type {
   ChatEvent,
   ContentBlock,
   StderrEvent,
-  InputCapabilities,
 } from './types';
 
 // Claude Code --output-format stream-json event shapes

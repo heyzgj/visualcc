@@ -95,7 +95,7 @@ try {
   }
 } catch {}
 
-export const useSessionStore = create<SessionStore>((set, get) => ({
+export const useSessionStore = create<SessionStore>((set, _get) => ({
   sessions: initialGhosts,
   showNewDialog: false,
   messages: {},

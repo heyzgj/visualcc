@@ -7,12 +7,11 @@ import {
   useReactFlow,
   type Node,
   type NodeChange,
-  applyNodeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import SessionNode from './SessionNode';
 import { useSessionStore } from '../stores/sessionStore';
-import { useZoomLevel, type ZoomTier } from '../hooks/useZoomLevel';
+import { useZoomLevel } from '../hooks/useZoomLevel';
 
 const nodeTypes = {
   session: SessionNode,
