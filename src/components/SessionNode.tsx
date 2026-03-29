@@ -96,6 +96,8 @@ const EMPTY_INTEL: SessionIntel = {
   outcome: null,
 };
 
+const EMPTY_MESSAGES: import('../adapters/types').ChatEvent[] = [];
+
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -299,7 +301,7 @@ function SessionNodeComponent({ data }: NodeProps) {
   const elapsed = Date.now() - nodeData.created_at;
 
   // Get markdown content for chat mode preview
-  const messages = useSessionStore((s) => s.messages[nodeData.id] ?? []);
+  const messages = useSessionStore((s) => s.messages[nodeData.id]) ?? EMPTY_MESSAGES;
   const markdownContent = messages
     .filter((m) => m.type === 'assistant_message')
     .flatMap((m) =>
