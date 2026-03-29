@@ -105,8 +105,18 @@ impl PtyManager {
             }
         }
 
+        // Resolve tool to absolute path so tmux can find it regardless of its shell's PATH
+        let tool_bin = which_tool(tool.command());
+
+        // Override the first arg with the resolved path
+        tool_args[0] = tool_bin;
+
         // 1. Spawn the tool inside a new detached tmux session
         let mut tmux_cmd = Command::new("tmux");
+        // Inherit current PATH so tmux's shell can find dependencies
+        if let Ok(path) = std::env::var("PATH") {
+            tmux_cmd.env("PATH", &path);
+        }
         tmux_cmd.args([
             "new-session",
             "-d",
@@ -568,4 +578,21 @@ impl PtyManager {
             .map(|s| s.info.clone())
             .collect()
     }
+}
+
+/// Resolve a tool name to its absolute path using `which`.
+/// Falls back to the bare name if `which` fails.
+fn which_tool(name: &str) -> String {
+    Command::new("which")
+        .arg(name)
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| name.to_string())
 }
