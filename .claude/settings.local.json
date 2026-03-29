@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/supergeorge/Desktop/project/visualcc -name .* -o -name *)",
+      "Bash(gh api:*)",
+      "Bash(curl -sL https://raw.githubusercontent.com/anthropics/skills/main/skills/brand-guidelines/SKILL.md)",
+      "Bash(claude --version)",
+      "Bash(codex --help)",
+      "Bash(codex --version)",
+      "Bash(claude --output-format stream-json -p \"hello\" --max-turns 1)",
+      "Bash(codex exec:*)",
+      "Bash(claude --output-format json -p \"what is 2+2?\")",
+      "Bash(npm list:*)",
+      "Bash(claude --output-format stream-json -p \"hello\" --max-turns 1 --verbose)",
+      "Bash(claude mcp:*)",
+      "Bash(codex mcp-server:*)",
+      "Bash(codex mcp:*)",
+      "Bash(claude --output-format stream-json -p \"what is 2+2?\" --max-turns 1 --verbose)",
+      "Bash(codex app-server:*)",
+      "Bash(grep -E \"\\\\.\\(json|toml\\)$|^d\")"
+    ]
+  }
+}

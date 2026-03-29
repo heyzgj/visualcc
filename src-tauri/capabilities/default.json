@@ -10,6 +10,21 @@
     "dialog:default",
     "dialog:allow-open",
     "shell:default",
-    "notification:default"
+    "notification:default",
+    "fs:default",
+    "fs:allow-read",
+    "fs:allow-write",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-read-dir",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/.clockwork/**" }
+      ]
+    }
   ]
 }

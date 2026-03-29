@@ -2,15 +2,16 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useReactFlow } from '@xyflow/react';
+import ModeSwitch from './ModeSwitch';
 
-export default function Toolbar() {
+/**
+ * Canvas-specific toolbar controls (Founder Mode only).
+ * Must be rendered inside ReactFlowProvider.
+ */
+export function CanvasToolbar() {
   const sessions = useSessionStore((s) => s.sessions);
   const setShowNewDialog = useSessionStore((s) => s.setShowNewDialog);
-  const { theme, toggleTheme } = useThemeStore();
-  const { notificationsEnabled, toggleNotifications } = useSettingsStore();
   const { fitView, setCenter } = useReactFlow();
-
-  const liveSessions = sessions.filter((s) => !s.isGhost);
 
   const handleOrganize = () => {
     if (sessions.length === 0) return;
@@ -36,7 +37,7 @@ export default function Toolbar() {
   };
 
   return (
-    <div className="toolbar">
+    <>
       <button
         className="toolbar-btn primary"
         onClick={() => setShowNewDialog(true)}
@@ -53,8 +54,30 @@ export default function Toolbar() {
       <button className="toolbar-btn" onClick={handleResetView} title="Zoom to fit all sessions">
         Reset View
       </button>
+    </>
+  );
+}
+
+/**
+ * Shared toolbar shell: renders ModeSwitch + theme/notifications.
+ * Canvas-specific controls are injected as children.
+ */
+export default function Toolbar({ children }: { children?: React.ReactNode }) {
+  const sessions = useSessionStore((s) => s.sessions);
+  const { theme, toggleTheme } = useThemeStore();
+  const { notificationsEnabled, toggleNotifications } = useSettingsStore();
+
+  const liveSessions = sessions.filter((s) => !s.isGhost);
+
+  return (
+    <div className="toolbar">
+      <ModeSwitch />
 
       <div className="toolbar-divider" />
+
+      {children}
+
+      {children && <div className="toolbar-divider" />}
 
       <button
         className="toolbar-btn"

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; }
+  canvas { image-rendering: -webkit-optimize-contrast; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = 1024;
+
+// Background: rounded square with deep warm dark
+const bgRadius = 200;
+ctx.beginPath();
+roundRect(ctx, 0, 0, W, W, bgRadius);
+ctx.fillStyle = '#141413';
+ctx.fill();
+
+// Subtle gradient overlay for depth
+const grad = ctx.createLinearGradient(0, 0, W, W);
+grad.addColorStop(0, 'rgba(217, 119, 87, 0.08)');
+grad.addColorStop(0.5, 'rgba(20, 20, 19, 0)');
+grad.addColorStop(1, 'rgba(106, 155, 204, 0.06)');
+ctx.beginPath();
+roundRect(ctx, 0, 0, W, W, bgRadius);
+ctx.fillStyle = grad;
+ctx.fill();
+
+// Dot grid (subtle canvas texture)
+ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+for (let x = 100; x < W - 80; x += 40) {
+  for (let y = 100; y < W - 80; y += 40) {
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// === Three connected tiles ===
+
+// Tile 1 (top-left) - Claude orange accent - "done"
+drawTile(ctx, 180, 200, 280, 200, '#d97757', '#788c5d', 'done');
+
+// Tile 2 (right) - Running blue
+drawTile(ctx, 540, 320, 280, 200, '#6a9bcc', '#6a9bcc', 'running');
+
+// Tile 3 (bottom-left) - Needs input amber
+drawTile(ctx, 240, 560, 280, 200, '#d97757', '#d97757', 'active');
+
+// === Connection lines (edges) ===
+
+// Tile 1 → Tile 2
+drawEdge(ctx, 460, 300, 540, 420, '#6a9bcc');
+
+// Tile 1 → Tile 3
+drawEdge(ctx, 320, 400, 380, 560, '#d97757');
+
+// Tile 2 → Tile 3
+drawEdge(ctx, 680, 520, 520, 660, '#788c5d');
+
+// === Small arrow markers on edges ===
+drawArrowHead(ctx, 540, 420, Math.atan2(420-300, 540-460), '#6a9bcc');
+drawArrowHead(ctx, 380, 560, Math.atan2(560-400, 380-320), '#d97757');
+drawArrowHead(ctx, 520, 660, Math.atan2(660-520, 520-680), '#788c5d');
+
+// Download link
+const link = document.createElement('a');
+link.download = 'icon-source.png';
+link.href = c.toDataURL('image/png');
+link.textContent = 'Download PNG';
+link.style.cssText = 'position:fixed;top:20px;left:20px;color:white;font-family:sans-serif;font-size:20px;';
+document.body.appendChild(link);
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function drawTile(ctx, x, y, w, h, accentColor, statusColor, status) {
+  const r = 16;
+
+  // Glow
+  ctx.shadowColor = accentColor;
+  ctx.shadowBlur = status === 'active' ? 30 : 15;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Tile body
+  ctx.beginPath();
+  roundRect(ctx, x, y, w, h, r);
+  ctx.fillStyle = '#1c1c1a';
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = statusColor;
+  ctx.lineWidth = status === 'active' ? 3 : 2;
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+
+  // Header bar
+  ctx.fillStyle = '#252522';
+  ctx.beginPath();
+  roundRect(ctx, x, y, w, 36, r);
+  ctx.fill();
+  // Cover bottom corners of header
+  ctx.fillRect(x, y + 20, w, 16);
+
+  // Header separator
+  ctx.strokeStyle = '#2a2a27';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + 36);
+  ctx.lineTo(x + w, y + 36);
+  ctx.stroke();
+
+  // Tool dot
+  ctx.fillStyle = accentColor;
+  ctx.beginPath();
+  ctx.arc(x + 22, y + 18, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Title bar lines (text placeholder)
+  ctx.fillStyle = '#faf9f5';
+  ctx.globalAlpha = 0.7;
+  ctx.fillRect(x + 38, y + 14, 80, 8);
+  ctx.globalAlpha = 0.3;
+  ctx.fillRect(x + 128, y + 14, 50, 8);
+  ctx.globalAlpha = 1;
+
+  // Content lines (smart subtitle / preview placeholder)
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#faf9f5';
+  for (let i = 0; i < 4; i++) {
+    const lw = 60 + Math.random() * 140;
+    ctx.fillRect(x + 16, y + 52 + i * 22, lw, 6);
+  }
+  ctx.globalAlpha = 1;
+
+  // Status dot in footer
+  ctx.fillStyle = statusColor;
+  ctx.beginPath();
+  ctx.arc(x + w - 24, y + h - 16, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Connection handle (bottom center)
+  ctx.fillStyle = '#252522';
+  ctx.strokeStyle = '#3a3a36';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x + w/2, y + h, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Connection handle (top center)
+  ctx.beginPath();
+  ctx.arc(x + w/2, y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawEdge(ctx, x1, y1, x2, y2, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.6;
+  ctx.setLineDash([]);
+
+  // Bezier curve
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const cx1 = midX;
+  const cy1 = y1;
+  const cx2 = midX;
+  const cy2 = y2;
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+  ctx.stroke();
+
+  ctx.globalAlpha = 1;
+}
+
+function drawArrowHead(ctx, x, y, angle, color) {
+  const size = 10;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.6;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size, -size * 0.6);
+  ctx.lineTo(-size, size * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+</script>
+</body>
+</html>
