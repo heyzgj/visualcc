@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import type { SessionInfo, ToolType, SessionStatus, SessionIntel } from '../types/session';
 import type { ChatEvent, RenderMode } from '../adapters/types';
+import type { EventCallback } from '../hooks/useSessionEvents';
+
+export type AppMode = 'founder' | 'vacation';
+
+export interface FounderEventLogEntry {
+  ts: string;
+  sessionId: string;
+  event: string;
+  detail: string;
+}
 
 const PERSIST_KEY = 'visualcc-sessions';
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,6 +77,12 @@ interface SessionStore {
   tileSizes: Record<string, { width: number; height: number }>;
   sessionIntel: Record<string, SessionIntel>;
 
+  // Vacation Mode state
+  mode: AppMode;
+  reviewerSessionId: string | null;
+  founderEventLog: FounderEventLogEntry[];
+  onSessionEvent: EventCallback | null;
+
   addSession: (session: SessionInfo) => void;
   removeSession: (id: string) => void;
   removeGhost: (id: string) => void;
@@ -80,6 +96,13 @@ interface SessionStore {
   incrementParseErrors: (id: string) => void;
   resetParseErrors: (id: string) => void;
   updateIntel: (id: string, intel: Partial<SessionIntel>) => void;
+
+  // Vacation Mode actions
+  setMode: (mode: AppMode) => void;
+  setReviewerSessionId: (id: string | null) => void;
+  addFounderEvent: (entry: FounderEventLogEntry) => void;
+  clearFounderEventLog: () => void;
+  setOnSessionEvent: (callback: EventCallback | null) => void;
 }
 
 // Load ghost tiles from localStorage on startup
@@ -103,6 +126,12 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   parseErrors: {},
   tileSizes: initialTileSizes,
   sessionIntel: {},
+
+  // Vacation Mode initial state
+  mode: 'founder' as AppMode,
+  reviewerSessionId: null,
+  founderEventLog: [],
+  onSessionEvent: null,
 
   addSession: (session) =>
     set((state) => {
@@ -225,6 +254,14 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
         [id]: { ...(state.sessionIntel[id] ?? { lastActivity: '', detectedUrl: null, pendingQuestion: null, outcome: null }), ...intel },
       },
     })),
+
+  // Vacation Mode actions
+  setMode: (mode) => set({ mode }),
+  setReviewerSessionId: (id) => set({ reviewerSessionId: id }),
+  addFounderEvent: (entry) =>
+    set((state) => ({ founderEventLog: [...state.founderEventLog, entry] })),
+  clearFounderEventLog: () => set({ founderEventLog: [] }),
+  setOnSessionEvent: (callback) => set({ onSessionEvent: callback }),
 }));
 
 // Flush persistence immediately on window close
