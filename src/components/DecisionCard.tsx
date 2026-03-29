@@ -102,7 +102,7 @@ export default function DecisionCard({
           >
             <div className="option-label">
               {option.recommended && !card.isTasteDecision && (
-                <span className="option-star" title="Recommended">*</span>
+                <span className="option-star" title="Recommended">★</span>
               )}
               {option.label}
             </div>

@@ -163,6 +163,8 @@ export function useClockwork() {
           }
         } catch (err) {
           console.error('Error processing outbox file:', entry.name, err);
+          // Remove from known set so it can be retried
+          knownOutboxFilesRef.current.delete(entry.name);
         }
       }
     } catch (err) {
@@ -219,6 +221,7 @@ export function useClockwork() {
           }
         } catch (err) {
           console.error('Error processing card file:', entry.name, err);
+          knownCardFilesRef.current.delete(entry.name);
         }
       }
     } catch (err) {
@@ -376,6 +379,12 @@ export function useClockwork() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Reset the circuit breaker when a worker resumes working */
+  const recordResolution = useCallback((sessionId: string) => {
+    startResolutionTimer(sessionId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return {
     recordBlock,
     isCircuitBroken,
@@ -383,6 +392,7 @@ export function useClockwork() {
     getHandledCountToday,
     resolveCard,
     setSignalResolver,
+    recordResolution,
   };
 }
 

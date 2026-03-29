@@ -2,16 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { useCardStore, type DecisionCard as DecisionCardType } from '../stores/cardStore';
 import DecisionCard from './DecisionCard';
-import { useClockwork } from '../hooks/useClockwork';
+import type { useClockwork as UseClockworkType } from '../hooks/useClockwork';
 
 interface DecisionQueueProps {
   onViewCanvas: () => void;
+  clockwork: ReturnType<typeof UseClockworkType>;
+  onSendToReviewer?: (card: DecisionCardType, message: string) => void;
 }
 
-export default function DecisionQueue({ onViewCanvas }: DecisionQueueProps) {
+export default function DecisionQueue({ onViewCanvas, clockwork, onSendToReviewer }: DecisionQueueProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const cards = useCardStore((s) => s.cards);
-  const clockwork = useClockwork();
   const [handledCount, setHandledCount] = useState(0);
 
   const liveSessions = sessions.filter((s) => !s.isGhost);
@@ -38,6 +39,15 @@ export default function DecisionQueue({ onViewCanvas }: DecisionQueueProps) {
     onViewCanvas();
   }, [onViewCanvas]);
 
+  const handleSendToReviewer = useCallback(
+    (card: DecisionCardType, message: string) => {
+      if (onSendToReviewer) {
+        onSendToReviewer(card, message);
+      }
+    },
+    [onSendToReviewer]
+  );
+
   return (
     <div className="decision-queue">
       {/* Header */}
@@ -59,6 +69,7 @@ export default function DecisionQueue({ onViewCanvas }: DecisionQueueProps) {
               card={card}
               onResolve={handleResolve}
               onSwitchToFounder={handleSwitchToFounder}
+              onSendToReviewer={handleSendToReviewer}
             />
           ))
         ) : (

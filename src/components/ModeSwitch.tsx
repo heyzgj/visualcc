@@ -35,6 +35,7 @@ export default function ModeSwitch() {
       } else {
         // Switching to Founder Mode
         reviewer.pauseReviewer();
+        state.clearFounderEventLog();
         state.setMode('founder');
       }
     },
