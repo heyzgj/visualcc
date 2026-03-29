@@ -113,10 +113,11 @@ impl PtyManager {
 
         // 1. Spawn the tool inside a new detached tmux session
         let mut tmux_cmd = Command::new("tmux");
-        // Inherit current PATH so tmux's shell can find dependencies
+        // Inherit current environment so tmux's shell can find dependencies
         if let Ok(path) = std::env::var("PATH") {
             tmux_cmd.env("PATH", &path);
         }
+        tmux_cmd.env("TERM", "xterm-256color");
         tmux_cmd.args([
             "new-session",
             "-d",
@@ -182,6 +183,7 @@ impl PtyManager {
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
         let mut cmd = CommandBuilder::new("tmux");
+        cmd.env("TERM", "xterm-256color");
         cmd.args(["attach-session", "-t", tmux_name]);
 
         let _child = pair
