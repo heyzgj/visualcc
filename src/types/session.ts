@@ -13,6 +13,16 @@ export interface SessionInfo {
   isGhost?: boolean;
   taskTitle?: string;
   previewUrl?: string;
+  /** tmux session name (e.g. "vcc-<uuid>") — present when session is tmux-backed */
+  tmuxName?: string;
+  /** True when this ghost tile has a live tmux session that can be reattached */
+  isLiveGhost?: boolean;
+}
+
+/** Info about a discovered tmux session (returned from backend) */
+export interface TmuxSessionInfo {
+  tmux_name: string;
+  session_id: string;
 }
 
 export interface CreateSessionRequest {

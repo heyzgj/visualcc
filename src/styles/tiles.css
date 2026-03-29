@@ -335,6 +335,44 @@
   color: var(--text-muted);
 }
 
+/* Live ghost (tmux still running) */
+.tile-ghost .ghost-reattach-btn {
+  border-color: var(--status-running);
+  color: var(--status-running);
+}
+
+.tile-ghost .ghost-reattach-btn:hover {
+  background: var(--status-running);
+  border-color: var(--status-running);
+  color: #fff;
+}
+
+.live-ghost-pulse {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--status-running);
+  animation: live-ghost-pulse-anim 2s ease-in-out infinite;
+}
+
+@keyframes live-ghost-pulse-anim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.ghost-task-title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Animations */
 @keyframes tile-appear {
   from {

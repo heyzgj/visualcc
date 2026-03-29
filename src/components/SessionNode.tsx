@@ -111,7 +111,7 @@ function SessionNodeComponent({ data }: NodeProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
-  const { killSession, killStructuredSession, writeToSession, resizeSession, relaunchSession } = useSession();
+  const { closeSession, killSession, killStructuredSession, killTmuxSessionByName, writeToSession, resizeSession, relaunchSession, reattachSession } = useSession();
   const removeGhost = useSessionStore((s) => s.removeGhost);
   const theme = useThemeStore((s) => s.theme);
   const intel = useSessionStore((s) => s.sessionIntel[nodeData.id]) ?? EMPTY_INTEL;
@@ -232,15 +232,23 @@ function SessionNodeComponent({ data }: NodeProps) {
     return () => node.removeEventListener('wheel', stopWheel);
   }, []);
 
-  const handleClose = useCallback(async () => {
+  const handleClose = useCallback(async (e?: React.MouseEvent) => {
     if (isGhost) {
+      // For live ghosts, shift+click kills the tmux session; otherwise just dismiss
+      if (nodeData.isLiveGhost && nodeData.tmuxName && e?.shiftKey) {
+        await killTmuxSessionByName(nodeData.tmuxName);
+      }
       removeGhost(nodeData.id);
     } else if (isChatMode) {
       await killStructuredSession(nodeData.id);
-    } else {
+    } else if (e?.shiftKey) {
+      // Shift+click: kill entirely (including tmux session)
       await killSession(nodeData.id);
+    } else {
+      // Normal click: detach (tmux keeps running) or kill (direct PTY)
+      await closeSession(nodeData.id);
     }
-  }, [nodeData.id, isGhost, isChatMode, killSession, killStructuredSession, removeGhost]);
+  }, [nodeData.id, nodeData.isLiveGhost, nodeData.tmuxName, isGhost, isChatMode, closeSession, killSession, killStructuredSession, killTmuxSessionByName, removeGhost]);
 
   const handleRelaunch = useCallback(async () => {
     try {
@@ -249,6 +257,14 @@ function SessionNodeComponent({ data }: NodeProps) {
       // Error already logged
     }
   }, [nodeData.id, relaunchSession]);
+
+  const handleReattach = useCallback(async () => {
+    try {
+      await reattachSession(nodeData.id);
+    } catch {
+      // Error already logged
+    }
+  }, [nodeData.id, reattachSession]);
 
   const switchToTerminal = useCallback(() => setViewMode('terminal'), []);
   const switchToAuto = useCallback(() => setViewMode('auto'), []);
@@ -298,17 +314,30 @@ function SessionNodeComponent({ data }: NodeProps) {
   const renderContent = () => {
     // Ghost tiles
     if (isGhost) {
+      const isLive = nodeData.isLiveGhost === true;
       return (
         <div className="tile-ghost">
           <div className="ghost-icon" style={{
-            background: nodeData.tool === 'claude' ? 'rgba(217, 119, 87, 0.1)' : 'rgba(176, 174, 165, 0.1)',
-            color: nodeData.tool === 'claude' ? 'var(--status-active)' : 'var(--text-secondary)',
+            background: isLive
+              ? 'rgba(138, 160, 110, 0.15)'
+              : nodeData.tool === 'claude' ? 'rgba(217, 119, 87, 0.1)' : 'rgba(176, 174, 165, 0.1)',
+            color: isLive
+              ? 'var(--status-running)'
+              : nodeData.tool === 'claude' ? 'var(--status-active)' : 'var(--text-secondary)',
           }}>
-            {nodeData.tool === 'claude' ? 'C' : 'X'}
+            {isLive ? (
+              <span className="live-ghost-pulse" />
+            ) : (
+              nodeData.tool === 'claude' ? 'C' : 'X'
+            )}
           </div>
           {nodeData.taskTitle && <div className="ghost-task-title">{nodeData.taskTitle}</div>}
-          <div className="ghost-label">Previous session</div>
-          <button className="ghost-relaunch-btn" onClick={handleRelaunch}>Re-launch</button>
+          <div className="ghost-label">{isLive ? 'Session still running' : 'Previous session'}</div>
+          {isLive ? (
+            <button className="ghost-relaunch-btn ghost-reattach-btn" onClick={handleReattach}>Reattach</button>
+          ) : (
+            <button className="ghost-relaunch-btn" onClick={handleRelaunch}>Re-launch</button>
+          )}
         </div>
       );
     }
@@ -461,7 +490,11 @@ function SessionNodeComponent({ data }: NodeProps) {
             {viewMode === 'terminal' ? '◫' : '⌨'}
           </button>
         )}
-        <button className="close-btn" onClick={handleClose} title={isGhost ? 'Dismiss' : 'Kill session'}>
+        <button
+          className="close-btn"
+          onClick={(e) => handleClose(e)}
+          title={isGhost ? (nodeData.isLiveGhost ? 'Dismiss (Shift+click to kill)' : 'Dismiss') : (nodeData.tmuxName ? 'Detach (Shift+click to kill)' : 'Kill session')}
+        >
           &times;
         </button>
       </div>
@@ -482,14 +515,14 @@ function SessionNodeComponent({ data }: NodeProps) {
       {/* Footer */}
       <div className="tile-footer">
         {isGhost ? (
-          <span className="session-timer ghost-hint">Saved session</span>
+          <span className="session-timer ghost-hint">{nodeData.isLiveGhost ? 'tmux session alive' : 'Saved session'}</span>
         ) : (
           <span className="session-timer">{formatDuration(elapsed)}</span>
         )}
         <div className="status-badge">
-          <span className={`status-dot ${nodeData.status}`} />
-          <span style={{ color: `var(--status-${nodeData.status === 'done' ? 'idle' : nodeData.status})` }}>
-            {isGhost ? 'Ghost' : STATUS_LABELS[nodeData.status]}
+          <span className={`status-dot ${nodeData.isLiveGhost ? 'running' : nodeData.status}`} />
+          <span style={{ color: nodeData.isLiveGhost ? 'var(--status-running)' : `var(--status-${nodeData.status === 'done' ? 'idle' : nodeData.status})` }}>
+            {isGhost ? (nodeData.isLiveGhost ? 'Live' : 'Ghost') : STATUS_LABELS[nodeData.status]}
           </span>
         </div>
       </div>

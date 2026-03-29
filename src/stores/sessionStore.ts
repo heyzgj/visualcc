@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SessionInfo, ToolType, SessionStatus, SessionIntel } from '../types/session';
+import type { SessionInfo, ToolType, SessionStatus, SessionIntel, TmuxSessionInfo } from '../types/session';
 import type { ChatEvent, RenderMode } from '../adapters/types';
 
 const PERSIST_KEY = 'visualcc-sessions';
@@ -13,6 +13,7 @@ interface PersistedSession {
   tileSize: { width: number; height: number };
   taskTitle?: string;
   previewUrl?: string;
+  tmuxName?: string;
 }
 
 function loadPersistedSessions(): SessionInfo[] {
@@ -21,7 +22,7 @@ function loadPersistedSessions(): SessionInfo[] {
     if (!saved) return [];
     const items: PersistedSession[] = JSON.parse(saved);
     return items.map((item, i) => ({
-      id: `ghost-${i}-${Date.now()}`,
+      id: item.tmuxName ? item.tmuxName.replace('vcc-', '') : `ghost-${i}-${Date.now()}`,
       tool: item.tool,
       cwd: item.cwd,
       label: item.label,
@@ -31,6 +32,8 @@ function loadPersistedSessions(): SessionInfo[] {
       isGhost: true,
       taskTitle: item.taskTitle,
       previewUrl: item.previewUrl,
+      tmuxName: item.tmuxName,
+      isLiveGhost: false, // Will be updated by discoverTmuxSessions
     }));
   } catch {
     return [];
@@ -53,6 +56,7 @@ function persistSessions(sessions: SessionInfo[], tileSizes: Record<string, { wi
       tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
       taskTitle: s.taskTitle,
       previewUrl: s.previewUrl,
+      tmuxName: s.tmuxName,
     }));
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
   }, 500);
@@ -80,6 +84,10 @@ interface SessionStore {
   incrementParseErrors: (id: string) => void;
   resetParseErrors: (id: string) => void;
   updateIntel: (id: string, intel: Partial<SessionIntel>) => void;
+  /** Mark ghost tiles as live if their tmux session is still running */
+  markLiveGhosts: (liveTmuxSessions: TmuxSessionInfo[]) => void;
+  /** Replace a live ghost with a reattached session */
+  reattachGhost: (ghostId: string, newSession: SessionInfo) => void;
 }
 
 // Load ghost tiles from localStorage on startup
@@ -225,6 +233,37 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
         [id]: { ...(state.sessionIntel[id] ?? { lastActivity: '', detectedUrl: null, pendingQuestion: null, outcome: null }), ...intel },
       },
     })),
+
+  markLiveGhosts: (liveTmuxSessions) =>
+    set((state) => {
+      const liveNames = new Set(liveTmuxSessions.map((s) => s.tmux_name));
+      return {
+        sessions: state.sessions.map((s) => {
+          if (s.isGhost && s.tmuxName && liveNames.has(s.tmuxName)) {
+            return { ...s, isLiveGhost: true };
+          }
+          return s;
+        }),
+      };
+    }),
+
+  reattachGhost: (ghostId, newSession) =>
+    set((state) => {
+      const ghost = state.sessions.find((s) => s.id === ghostId);
+      const ghostTileSize = state.tileSizes[ghostId] ?? { width: 560, height: 420 };
+      const { [ghostId]: _size, ...restSizes } = state.tileSizes;
+      const next = {
+        sessions: state.sessions
+          .filter((s) => s.id !== ghostId)
+          .concat({ ...newSession, position: ghost?.position ?? newSession.position }),
+        messages: { ...state.messages, [newSession.id]: [] as ChatEvent[] },
+        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' as RenderMode },
+        parseErrors: { ...state.parseErrors, [newSession.id]: 0 },
+        tileSizes: { ...restSizes, [newSession.id]: ghostTileSize },
+      };
+      persistSessions(next.sessions, next.tileSizes);
+      return next;
+    }),
 }));
 
 // Flush persistence immediately on window close
@@ -241,6 +280,7 @@ if (typeof window !== 'undefined') {
       tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
       taskTitle: s.taskTitle,
       previewUrl: s.previewUrl,
+      tmuxName: s.tmuxName,
     }));
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
   });

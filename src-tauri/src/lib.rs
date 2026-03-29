@@ -11,6 +11,9 @@ pub fn run() {
     let pty_manager = PtyManager::new();
     let process_manager = ProcessManager::new();
 
+    // Keep a clone for the exit handler
+    let pty_manager_for_exit = pty_manager.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -23,6 +26,13 @@ pub fn run() {
             commands::resize_session,
             commands::kill_session,
             commands::list_sessions,
+            commands::check_tmux,
+            commands::detach_session,
+            commands::reattach_session,
+            commands::kill_tmux_session,
+            commands::kill_tmux_session_by_name,
+            commands::discover_sessions,
+            commands::list_tmux_sessions,
             commands::create_structured_session,
             commands::send_message,
             commands::kill_structured_session,
@@ -36,6 +46,12 @@ pub fn run() {
                 )?;
             }
             Ok(())
+        })
+        .on_window_event(move |_window, event| {
+            // On window close/destroy, detach all tmux sessions so they survive
+            if let tauri::WindowEvent::Destroyed = event {
+                pty_manager_for_exit.detach_all();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::process_manager::ProcessManager;
-use crate::pty_manager::PtyManager;
+use crate::pty_manager::{PtyManager, TmuxSessionInfo};
 use crate::session::{SessionInfo, ToolType};
 
 // === PTY-based commands (terminal fallback) ===
@@ -49,6 +49,65 @@ pub fn list_sessions(
     pty_manager: State<'_, PtyManager>,
 ) -> Vec<SessionInfo> {
     pty_manager.list_sessions()
+}
+
+// === tmux session commands ===
+
+#[tauri::command]
+pub fn check_tmux(
+    pty_manager: State<'_, PtyManager>,
+) -> bool {
+    pty_manager.check_tmux()
+}
+
+#[tauri::command]
+pub fn detach_session(
+    pty_manager: State<'_, PtyManager>,
+    id: String,
+) -> Result<Option<String>, String> {
+    pty_manager.detach_session(&id)
+}
+
+#[tauri::command]
+pub fn reattach_session(
+    app: tauri::AppHandle,
+    pty_manager: State<'_, PtyManager>,
+    id: String,
+    tmux_name: String,
+    tool: ToolType,
+    cwd: String,
+) -> Result<String, String> {
+    pty_manager.reattach_session(&app, &id, &tmux_name, tool, cwd)
+}
+
+#[tauri::command]
+pub fn kill_tmux_session(
+    pty_manager: State<'_, PtyManager>,
+    id: String,
+) -> Result<(), String> {
+    pty_manager.kill_tmux_session(&id)
+}
+
+#[tauri::command]
+pub fn kill_tmux_session_by_name(
+    pty_manager: State<'_, PtyManager>,
+    tmux_name: String,
+) -> Result<(), String> {
+    pty_manager.kill_tmux_session_by_name(&tmux_name)
+}
+
+#[tauri::command]
+pub fn discover_sessions(
+    pty_manager: State<'_, PtyManager>,
+) -> Vec<TmuxSessionInfo> {
+    pty_manager.discover_sessions()
+}
+
+#[tauri::command]
+pub fn list_tmux_sessions(
+    pty_manager: State<'_, PtyManager>,
+) -> Vec<TmuxSessionInfo> {
+    pty_manager.list_tmux_sessions()
 }
 
 // === Structured output commands (rich chat UI) ===
