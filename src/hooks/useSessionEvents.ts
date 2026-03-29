@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { useSessionStore } from '../stores/sessionStore';
+import { useSessionStore, getSessionEventCallback } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { SessionStatus, QuestionInfo } from '../types/session';
 
@@ -135,7 +135,7 @@ export function useSessionEvents() {
         // If was blocked and now producing output, fire 'resumed'
         if (buf.wasBlocked) {
           buf.wasBlocked = false;
-          const callback = useSessionStore.getState().onSessionEvent;
+          const callback = getSessionEventCallback();
           if (callback) {
             callback({ type: 'resumed', sessionId: session.id });
           }
@@ -185,7 +185,7 @@ export function useSessionEvents() {
 
           // Detect errors in output
           if (ERROR_PATTERNS.test(stripped)) {
-            const callback = useSessionStore.getState().onSessionEvent;
+            const callback = getSessionEventCallback();
             if (callback) {
               callback({ type: 'errored', sessionId: session.id, error: stripped });
             }
@@ -233,7 +233,7 @@ export function useSessionEvents() {
           const lastLines = buf?.lines.slice(-10) ?? [];
 
           // Fire event
-          const callback = useSessionStore.getState().onSessionEvent;
+          const callback = getSessionEventCallback();
           if (callback) {
             if (payload === 'done') {
               callback({ type: 'completed', sessionId: session.id, lastLines });
@@ -374,7 +374,7 @@ function fireBlockedEvent(sessionId: string, buf: SessionBuffer) {
   buf.wasBlocked = true;
 
   const idleSeconds = Math.floor((Date.now() - buf.lastOutputTime) / 1000);
-  const callback = useSessionStore.getState().onSessionEvent;
+  const callback = getSessionEventCallback();
   if (callback) {
     callback({
       type: 'blocked',

@@ -5,6 +5,12 @@ import type { EventCallback } from '../hooks/useSessionEvents';
 
 export type AppMode = 'founder' | 'vacation';
 
+// Module-level callback — NOT in Zustand state to avoid re-render loops
+let _sessionEventCallback: EventCallback | null = null;
+export function getSessionEventCallback(): EventCallback | null {
+  return _sessionEventCallback;
+}
+
 export interface FounderEventLogEntry {
   ts: string;
   sessionId: string;
@@ -85,7 +91,6 @@ interface SessionStore {
   mode: AppMode;
   reviewerSessionId: string | null;
   founderEventLog: FounderEventLogEntry[];
-  onSessionEvent: EventCallback | null;
 
   addSession: (session: SessionInfo) => void;
   removeSession: (id: string) => void;
@@ -139,7 +144,6 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   mode: 'founder' as AppMode,
   reviewerSessionId: null,
   founderEventLog: [],
-  onSessionEvent: null,
 
   addSession: (session) =>
     set((state) => {
@@ -300,7 +304,7 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   addFounderEvent: (entry) =>
     set((state) => ({ founderEventLog: [...state.founderEventLog, entry] })),
   clearFounderEventLog: () => set({ founderEventLog: [] }),
-  setOnSessionEvent: (callback) => set({ onSessionEvent: callback }),
+  setOnSessionEvent: (callback) => { _sessionEventCallback = callback; },
 }));
 
 // Flush persistence immediately on window close
