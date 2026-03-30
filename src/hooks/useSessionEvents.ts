@@ -172,14 +172,18 @@ export function useSessionEvents() {
           }
 
           // Detect questions (Y/n, permission, open-ended)
+          // When detected, immediately set status to 'active' (needs input)
           if (YN_REGEX.test(stripped)) {
             buf.pendingQuestion = { text: stripped, type: 'yn', detectedAt: Date.now() };
+            useSessionStore.getState().updateStatus(session.id, 'active');
             fireBlockedEvent(session.id, buf);
           } else if (PERMISSION_REGEX.test(stripped)) {
             buf.pendingQuestion = { text: stripped, type: 'permission', detectedAt: Date.now() };
+            useSessionStore.getState().updateStatus(session.id, 'active');
             fireBlockedEvent(session.id, buf);
           } else if (SIGNAL_WORDS_REGEX.test(stripped)) {
             buf.pendingQuestion = { text: stripped, type: 'open', detectedAt: Date.now() };
+            useSessionStore.getState().updateStatus(session.id, 'active');
             fireBlockedEvent(session.id, buf);
           }
 
@@ -306,30 +310,30 @@ export function useSessionEvents() {
         const elapsed = now - buf.lastOutputTime;
         let newStatus: SessionStatus;
 
+        // Only two time-based states: running (recent output) and idle (no output)
+        // 'active' (needs input) is ONLY set by actual prompt detection (Y/n, permissions)
+        // not by idle time — after a turn ends, Claude is just idle, not "needing input"
         if (elapsed < 3000) {
           newStatus = 'running';
-        } else if (elapsed < 10000) {
-          newStatus = 'idle';
         } else {
-          newStatus = 'active'; // needs input
+          newStatus = 'idle';
+        }
+
+        // If there's a pending question detected from output patterns, mark as 'active'
+        if (buf.pendingQuestion && newStatus === 'idle') {
+          newStatus = 'active';
         }
 
         if (session.status !== newStatus) {
           updateStatus(session.id, newStatus);
 
-          // Notification on 'active' (needs input)
+          // Notification on 'active' (actual needs input, not time-based)
           if (newStatus === 'active') {
             const enabled = useSettingsStore.getState().notificationsEnabled;
             if (enabled && notifiedSessions.get(session.id) !== 'active') {
               notifiedSessions.set(session.id, 'active');
               const toolLabel = session.tool === 'claude' ? 'Claude Code' : 'Codex';
               sendNotification('Session Needs Input', `${session.label} (${toolLabel}) is waiting for your input`);
-            }
-
-            // Check for open-ended questions
-            if (!buf.pendingQuestion && buf.lastActivity.endsWith('?')) {
-              buf.pendingQuestion = { text: buf.lastActivity, type: 'open', detectedAt: Date.now() };
-              useSessionStore.getState().updateIntel(session.id, { pendingQuestion: buf.pendingQuestion });
             }
           } else {
             notifiedSessions.delete(session.id);
