@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useSessionStore, type AppMode } from '../stores/sessionStore';
 import { useCardStore } from '../stores/cardStore';
 import { useReviewerSession } from '../hooks/useReviewerSession';
@@ -8,14 +8,18 @@ export default function ModeSwitch() {
   const reviewerSessionId = useSessionStore((s) => s.reviewerSessionId);
   const cards = useCardStore((s) => s.cards);
   const reviewer = useReviewerSession();
+  const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const pendingCount = cards.length;
 
   const switchMode = useCallback(
     async (newMode: AppMode) => {
-      if (newMode === mode) return;
+      if (newMode === mode || switching) return;
 
       const state = useSessionStore.getState();
+      setSwitching(true);
+      setError(null);
 
       if (newMode === 'vacation') {
         if (!reviewerSessionId) {
@@ -24,6 +28,8 @@ export default function ModeSwitch() {
             await reviewer.startReviewer();
           } catch (err) {
             console.error('Failed to start reviewer:', err);
+            setError('Failed to start Reviewer session');
+            setSwitching(false);
             return;
           }
         } else {
@@ -38,8 +44,9 @@ export default function ModeSwitch() {
         state.clearFounderEventLog();
         state.setMode('founder');
       }
+      setSwitching(false);
     },
-    [mode, reviewerSessionId, reviewer]
+    [mode, switching, reviewerSessionId, reviewer]
   );
 
   return (
@@ -47,18 +54,23 @@ export default function ModeSwitch() {
       <button
         className={`mode-switch-tab ${mode === 'founder' ? 'active' : ''}`}
         onClick={() => switchMode('founder')}
+        disabled={switching}
       >
         Founder Mode
       </button>
       <button
         className={`mode-switch-tab ${mode === 'vacation' ? 'active' : ''}`}
         onClick={() => switchMode('vacation')}
+        disabled={switching}
       >
-        Vacation Mode
+        {switching ? 'Starting...' : 'Vacation Mode'}
         {pendingCount > 0 && (
           <span className="mode-switch-badge">{pendingCount}</span>
         )}
       </button>
+      {error && (
+        <div className="mode-switch-error">{error}</div>
+      )}
     </div>
   );
 }

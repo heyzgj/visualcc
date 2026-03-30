@@ -14,6 +14,7 @@ export default function NewSessionDialog() {
   const [taskTitle, setTaskTitle] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const [launching, setLaunching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleBrowse = useCallback(async () => {
     try {
@@ -26,14 +27,10 @@ export default function NewSessionDialog() {
   }, []);
 
   const handleLaunch = useCallback(async () => {
-    console.log('[VisualCC] handleLaunch called, cwd:', cwd, 'tool:', tool);
-    if (!cwd.trim()) {
-      console.log('[VisualCC] handleLaunch: cwd is empty, returning');
-      return;
-    }
+    if (!cwd.trim()) return;
     setLaunching(true);
+    setError(null);
     try {
-      console.log('[VisualCC] calling createSession...');
       await createSession({
         tool,
         cwd: cwd.trim(),
@@ -41,12 +38,12 @@ export default function NewSessionDialog() {
         taskTitle: taskTitle.trim() || undefined,
         previewUrl: previewUrl.trim() || undefined,
       });
-      console.log('[VisualCC] createSession succeeded');
       // Track in recents
       useRecentsStore.getState().addRecent(tool, cwd.trim());
       setShowNewDialog(false);
     } catch (err) {
-      console.error('[VisualCC] Launch failed:', err);
+      console.error('Launch failed:', err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLaunching(false);
     }
@@ -133,6 +130,13 @@ export default function NewSessionDialog() {
             placeholder="e.g., http://localhost:3000"
           />
         </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="dialog-error">
+            Launch failed: {error}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="dialog-actions">
