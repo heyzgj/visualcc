@@ -26,9 +26,14 @@ export default function NewSessionDialog() {
   }, []);
 
   const handleLaunch = useCallback(async () => {
-    if (!cwd.trim()) return;
+    console.log('[VisualCC] handleLaunch called, cwd:', cwd, 'tool:', tool);
+    if (!cwd.trim()) {
+      console.log('[VisualCC] handleLaunch: cwd is empty, returning');
+      return;
+    }
     setLaunching(true);
     try {
+      console.log('[VisualCC] calling createSession...');
       await createSession({
         tool,
         cwd: cwd.trim(),
@@ -36,11 +41,12 @@ export default function NewSessionDialog() {
         taskTitle: taskTitle.trim() || undefined,
         previewUrl: previewUrl.trim() || undefined,
       });
+      console.log('[VisualCC] createSession succeeded');
       // Track in recents
       useRecentsStore.getState().addRecent(tool, cwd.trim());
       setShowNewDialog(false);
     } catch (err) {
-      console.error('Launch failed:', err);
+      console.error('[VisualCC] Launch failed:', err);
     } finally {
       setLaunching(false);
     }

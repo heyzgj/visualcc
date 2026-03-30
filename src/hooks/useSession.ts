@@ -3,16 +3,20 @@ import type { SessionInfo, CreateSessionRequest, TmuxSessionInfo } from '../type
 import { useSessionStore, getNextPosition } from '../stores/sessionStore';
 
 export function useSession() {
-  const { sessions, addSession, removeSession } = useSessionStore();
+  // Use getState() for reads inside callbacks to avoid subscribing to full store
+  const addSession = useSessionStore((s) => s.addSession);
+  const removeSession = useSessionStore((s) => s.removeSession);
 
   // Create a PTY-based session (terminal mode)
   async function createSession(req: CreateSessionRequest) {
     try {
+      console.log('[VisualCC] useSession.createSession invoking Tauri create_session', req.tool, req.cwd);
       const id = await invoke<string>('create_session', {
         tool: req.tool,
         cwd: req.cwd,
         initialPrompt: req.initial_prompt ?? null,
       });
+      console.log('[VisualCC] Tauri create_session returned id:', id);
 
       // Check if tmux is available to determine if we got a tmux-backed session
       let tmuxName: string | undefined;
@@ -25,7 +29,7 @@ export function useSession() {
         // Ignore — tmux detection failed, session is direct PTY
       }
 
-      const position = getNextPosition(sessions);
+      const position = getNextPosition(useSessionStore.getState().sessions);
       const dirName = req.cwd.split('/').pop() || req.cwd;
 
       const session: SessionInfo = {
@@ -60,7 +64,7 @@ export function useSession() {
         initialPrompt: req.initial_prompt ?? null,
       });
 
-      const position = getNextPosition(sessions);
+      const position = getNextPosition(useSessionStore.getState().sessions);
       const dirName = req.cwd.split('/').pop() || req.cwd;
 
       const session: SessionInfo = {
