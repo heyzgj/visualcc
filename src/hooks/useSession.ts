@@ -45,9 +45,7 @@ export function useSession() {
         tmuxName,
       };
 
-      addSession(session);
-      // Override render mode to terminal for PTY sessions
-      useSessionStore.getState().setRenderMode(id, 'terminal');
+      addSession(session, 'terminal');
       return session;
     } catch (err) {
       console.error('Failed to create session:', err);

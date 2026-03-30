@@ -14,7 +14,13 @@ pub fn create_session(
     cwd: String,
     initial_prompt: Option<String>,
 ) -> Result<String, String> {
-    pty_manager.create_session(&app, tool, cwd, initial_prompt)
+    eprintln!("[VisualCC-Rust] create_session called: tool={:?}, cwd={}", tool, cwd);
+    let result = pty_manager.create_session(&app, tool, cwd, initial_prompt);
+    match &result {
+        Ok(id) => eprintln!("[VisualCC-Rust] create_session OK: id={}", id),
+        Err(e) => eprintln!("[VisualCC-Rust] create_session ERROR: {}", e),
+    }
+    result
 }
 
 #[tauri::command]

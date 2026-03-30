@@ -92,7 +92,7 @@ interface SessionStore {
   reviewerSessionId: string | null;
   founderEventLog: FounderEventLogEntry[];
 
-  addSession: (session: SessionInfo) => void;
+  addSession: (session: SessionInfo, renderMode?: RenderMode) => void;
   removeSession: (id: string) => void;
   removeGhost: (id: string) => void;
   relaunchGhost: (ghostId: string, newSession: SessionInfo) => void;
@@ -145,12 +145,12 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   reviewerSessionId: null,
   founderEventLog: [],
 
-  addSession: (session) =>
+  addSession: (session, renderMode) =>
     set((state) => {
       const next = {
         sessions: [...state.sessions, session],
         messages: { ...state.messages, [session.id]: [] as ChatEvent[] },
-        renderModes: { ...state.renderModes, [session.id]: 'chat' as RenderMode },
+        renderModes: { ...state.renderModes, [session.id]: (renderMode ?? 'chat') as RenderMode },
         parseErrors: { ...state.parseErrors, [session.id]: 0 },
         tileSizes: { ...state.tileSizes, [session.id]: { width: 560, height: 420 } },
       };
