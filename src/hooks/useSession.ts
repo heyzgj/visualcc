@@ -53,37 +53,6 @@ export function useSession() {
     }
   }
 
-  // Create a structured output session (chat mode)
-  async function createStructuredSession(req: CreateSessionRequest) {
-    try {
-      const id = await invoke<string>('create_structured_session', {
-        tool: req.tool,
-        cwd: req.cwd,
-        initialPrompt: req.initial_prompt ?? null,
-      });
-
-      const position = getNextPosition(useSessionStore.getState().sessions);
-      const dirName = req.cwd.split('/').pop() || req.cwd;
-
-      const session: SessionInfo = {
-        id,
-        tool: req.tool,
-        cwd: req.cwd,
-        label: dirName,
-        status: 'running',
-        created_at: Date.now(),
-        position,
-      };
-
-      addSession(session);
-      // Render mode defaults to 'chat' via addSession
-      return session;
-    } catch (err) {
-      console.error('Failed to create structured session:', err);
-      throw err;
-    }
-  }
-
   // Close a session: detach if tmux-backed, kill otherwise
   async function closeSession(id: string) {
     const session = useSessionStore.getState().sessions.find((s) => s.id === id);
@@ -111,15 +80,6 @@ export function useSession() {
       await invoke('kill_session', { id });
     } catch (err) {
       console.error('Failed to kill session:', err);
-    }
-    removeSession(id);
-  }
-
-  async function killStructuredSession(id: string) {
-    try {
-      await invoke('kill_structured_session', { id });
-    } catch (err) {
-      console.error('Failed to kill structured session:', err);
     }
     removeSession(id);
   }
@@ -242,10 +202,8 @@ export function useSession() {
 
   return {
     createSession,
-    createStructuredSession,
     closeSession,
     killSession,
-    killStructuredSession,
     killTmuxSessionByName,
     writeToSession,
     resizeSession,

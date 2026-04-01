@@ -1,15 +1,12 @@
 mod commands;
-mod process_manager;
 mod pty_manager;
 mod session;
 
-use process_manager::ProcessManager;
 use pty_manager::PtyManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pty_manager = PtyManager::new();
-    let process_manager = ProcessManager::new();
 
     // Keep a clone for the exit handler
     let pty_manager_for_exit = pty_manager.clone();
@@ -20,7 +17,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
         .manage(pty_manager)
-        .manage(process_manager)
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::prepare_reviewer_workspace,
@@ -35,9 +31,6 @@ pub fn run() {
             commands::kill_tmux_session_by_name,
             commands::discover_sessions,
             commands::list_tmux_sessions,
-            commands::create_structured_session,
-            commands::send_message,
-            commands::kill_structured_session,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

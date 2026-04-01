@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { SessionInfo, ToolType, SessionStatus, SessionIntel, TmuxSessionInfo } from '../types/session';
-import type { ChatEvent, RenderMode } from '../adapters/types';
+// Minimal types (structured output pipeline was removed for v1)
+type RenderMode = 'terminal' | 'chat';
+type ChatEvent = Record<string, unknown>;
 import type { EventCallback } from '../hooks/useSessionEvents';
 
 export type AppMode = 'founder' | 'vacation';

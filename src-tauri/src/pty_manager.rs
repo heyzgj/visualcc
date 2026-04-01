@@ -72,6 +72,15 @@ impl PtyManager {
         cwd: String,
         initial_prompt: Option<String>,
     ) -> Result<String, String> {
+        // Validate working directory exists
+        let cwd_path = std::path::Path::new(&cwd);
+        if !cwd_path.exists() {
+            return Err(format!("Directory does not exist: {}", cwd));
+        }
+        if !cwd_path.is_dir() {
+            return Err(format!("Path is not a directory: {}", cwd));
+        }
+
         if self.check_tmux() {
             self.create_tmux_session(app, tool, cwd, initial_prompt)
         } else {
@@ -257,6 +266,14 @@ impl PtyManager {
                         );
                     }
                     Err(_) => {
+                        // PTY read error — emit error status
+                        if let Some(session) = sessions_ref.lock().get_mut(&session_id) {
+                            session.info.status = SessionStatus::Error;
+                        }
+                        let _ = app_handle.emit(
+                            &format!("session:status:{}", session_id),
+                            "error",
+                        );
                         break;
                     }
                 }
@@ -375,6 +392,13 @@ impl PtyManager {
                         );
                     }
                     Err(_) => {
+                        if let Some(session) = sessions_ref.lock().get_mut(&session_id) {
+                            session.info.status = SessionStatus::Error;
+                        }
+                        let _ = app_handle.emit(
+                            &format!("session:status:{}", session_id),
+                            "error",
+                        );
                         break;
                     }
                 }

@@ -2,7 +2,8 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useReactFlow } from '@xyflow/react';
-import ModeSwitch from './ModeSwitch';
+// ModeSwitch hidden for v1 — Vacation Mode deferred to v2
+// import ModeSwitch from './ModeSwitch';
 
 /**
  * Canvas-specific toolbar controls (Founder Mode only).
@@ -71,9 +72,9 @@ export default function Toolbar({ children }: { children?: React.ReactNode }) {
 
   return (
     <div className="toolbar">
-      <ModeSwitch />
-
-      <div className="toolbar-divider" />
+      {/* Vacation Mode deferred to v2 — ModeSwitch hidden for v1 */}
+      {/* <ModeSwitch /> */}
+      {/* <div className="toolbar-divider" /> */}
 
       {children}
 

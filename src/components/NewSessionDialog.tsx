@@ -46,24 +46,8 @@ export default function NewSessionDialog() {
     setLaunching(true);
     setError(null);
     try {
-      try {
-        const { exists, stat } = await import('@tauri-apps/plugin-fs');
-        const pathExists = await exists(trimmedCwd);
-        if (!pathExists) {
-          throw new Error('Project directory does not exist.');
-        }
-
-        const info = await stat(trimmedCwd);
-        if (!info.isDirectory) {
-          throw new Error('Project directory must be a folder.');
-        }
-      } catch (preflightErr) {
-        const preflightMessage = preflightErr instanceof Error ? preflightErr.message : String(preflightErr);
-        if (!/forbidden path|allow-exists/i.test(preflightMessage)) {
-          throw preflightErr;
-        }
-      }
-
+      // Directory validation is handled by the Rust backend (validate_cwd)
+      // which uses std::fs and is not restricted by Tauri FS scope
       await createSession({
         tool,
         cwd: trimmedCwd,

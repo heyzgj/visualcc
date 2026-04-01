@@ -2,23 +2,8 @@ use tauri::State;
 use std::fs;
 use std::path::Path;
 
-use crate::process_manager::ProcessManager;
 use crate::pty_manager::{PtyManager, TmuxSessionInfo};
 use crate::session::{SessionInfo, ToolType};
-
-fn validate_cwd(cwd: &str) -> Result<(), String> {
-    let path = Path::new(cwd);
-
-    if !path.exists() {
-        return Err(format!("Project directory does not exist: {}", cwd));
-    }
-
-    if !path.is_dir() {
-        return Err(format!("Project directory is not a folder: {}", cwd));
-    }
-
-    Ok(())
-}
 
 #[tauri::command]
 pub fn prepare_reviewer_workspace(claude_md: String) -> Result<String, String> {
@@ -38,7 +23,7 @@ pub fn prepare_reviewer_workspace(claude_md: String) -> Result<String, String> {
     Ok(clockwork.to_string_lossy().to_string())
 }
 
-// === PTY-based commands (terminal fallback) ===
+// === PTY-based commands ===
 
 #[tauri::command]
 pub fn create_session(
@@ -49,7 +34,6 @@ pub fn create_session(
     initial_prompt: Option<String>,
 ) -> Result<String, String> {
     eprintln!("[VisualCC-Rust] create_session called: tool={:?}, cwd={}", tool, cwd);
-    validate_cwd(&cwd)?;
     let result = pty_manager.create_session(&app, tool, cwd, initial_prompt);
     match &result {
         Ok(id) => eprintln!("[VisualCC-Rust] create_session OK: id={}", id),
@@ -149,35 +133,4 @@ pub fn list_tmux_sessions(
     pty_manager: State<'_, PtyManager>,
 ) -> Vec<TmuxSessionInfo> {
     pty_manager.list_tmux_sessions()
-}
-
-// === Structured output commands (rich chat UI) ===
-
-#[tauri::command]
-pub fn create_structured_session(
-    app: tauri::AppHandle,
-    process_manager: State<'_, ProcessManager>,
-    tool: ToolType,
-    cwd: String,
-    initial_prompt: Option<String>,
-) -> Result<String, String> {
-    validate_cwd(&cwd)?;
-    process_manager.create_session(&app, tool, cwd, initial_prompt)
-}
-
-#[tauri::command]
-pub fn send_message(
-    process_manager: State<'_, ProcessManager>,
-    id: String,
-    message: String,
-) -> Result<(), String> {
-    process_manager.send_message(&id, &message)
-}
-
-#[tauri::command]
-pub fn kill_structured_session(
-    process_manager: State<'_, ProcessManager>,
-    id: String,
-) -> Result<(), String> {
-    process_manager.kill_session(&id)
 }

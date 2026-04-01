@@ -16,7 +16,6 @@ import './styles/theme.css';
 import './styles/canvas.css';
 import './styles/tiles.css';
 import './styles/dialogs.css';
-import './styles/chat.css';
 import './styles/preview.css';
 import './styles/vacation.css';
 

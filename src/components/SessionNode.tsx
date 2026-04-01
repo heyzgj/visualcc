@@ -4,20 +4,18 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { usePtyOutput } from '../hooks/usePtyOutput';
-import { useStructuredOutput } from '../hooks/useStructuredOutput';
 import { useSession } from '../hooks/useSession';
 import { useSessionStore } from '../stores/sessionStore';
-import ChatView from './ChatView';
 import PreviewPane from './PreviewPane';
 import MarkdownPreview from './MarkdownPreview';
 import QuestionCard from './QuestionCard';
 import OutcomeCard from './OutcomeCard';
 import type { SessionInfo, SessionStatus, SessionIntel } from '../types/session';
-import type { RenderMode } from '../adapters/types';
 import type { ZoomTier } from '../hooks/useZoomLevel';
 import { useThemeStore } from '../stores/themeStore';
 
 type TileViewMode = 'auto' | 'terminal' | 'preview';
+type RenderMode = 'terminal' | 'chat';
 
 interface SessionNodeData extends SessionInfo {
   zoomTier: ZoomTier;
@@ -96,8 +94,6 @@ const EMPTY_INTEL: SessionIntel = {
   outcome: null,
 };
 
-const EMPTY_MESSAGES: import('../adapters/types').ChatEvent[] = [];
-
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -113,7 +109,7 @@ function SessionNodeComponent({ data }: NodeProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
-  const { closeSession, killSession, killStructuredSession, killTmuxSessionByName, writeToSession, resizeSession, relaunchSession, reattachSession } = useSession();
+  const { closeSession, killSession, killTmuxSessionByName, writeToSession, resizeSession, relaunchSession, reattachSession } = useSession();
   const removeGhost = useSessionStore((s) => s.removeGhost);
   const theme = useThemeStore((s) => s.theme);
   const intel = useSessionStore((s) => s.sessionIntel[nodeData.id]) ?? EMPTY_INTEL;
@@ -148,12 +144,6 @@ function SessionNodeComponent({ data }: NodeProps) {
   const displayTitle = nodeData.taskTitle || nodeData.label;
   const toolLabel = nodeData.tool === 'claude' ? 'Claude Code' : 'Codex';
   const shortPath = nodeData.cwd.replace(/^\/Users\/[^/]+/, '~');
-
-  // Listen to structured output for chat mode sessions
-  useStructuredOutput(
-    isChatMode ? nodeData.id : '',
-    nodeData.tool
-  );
 
   // Create/dispose terminal based on whether we need it
   useEffect(() => {
@@ -241,8 +231,6 @@ function SessionNodeComponent({ data }: NodeProps) {
         await killTmuxSessionByName(nodeData.tmuxName);
       }
       removeGhost(nodeData.id);
-    } else if (isChatMode) {
-      await killStructuredSession(nodeData.id);
     } else if (e?.shiftKey) {
       // Shift+click: kill entirely (including tmux session)
       await killSession(nodeData.id);
@@ -250,7 +238,7 @@ function SessionNodeComponent({ data }: NodeProps) {
       // Normal click: detach (tmux keeps running) or kill (direct PTY)
       await closeSession(nodeData.id);
     }
-  }, [nodeData.id, nodeData.isLiveGhost, nodeData.tmuxName, isGhost, isChatMode, closeSession, killSession, killStructuredSession, killTmuxSessionByName, removeGhost]);
+  }, [nodeData.id, nodeData.isLiveGhost, nodeData.tmuxName, isGhost, closeSession, killSession, killTmuxSessionByName, removeGhost]);
 
   const handleRelaunch = useCallback(async () => {
     try {
@@ -301,15 +289,8 @@ function SessionNodeComponent({ data }: NodeProps) {
   const elapsed = Date.now() - nodeData.created_at;
 
   // Get markdown content for chat mode preview
-  const messages = useSessionStore((s) => s.messages[nodeData.id]) ?? EMPTY_MESSAGES;
-  const markdownContent = messages
-    .filter((m) => m.type === 'assistant_message')
-    .flatMap((m) =>
-      m.type === 'assistant_message'
-        ? m.blocks.filter((b) => b.type === 'text').map((b) => (b as { type: 'text'; text: string }).text)
-        : []
-    )
-    .join('\n\n');
+  // Markdown content extraction is reserved for future structured output mode
+  const markdownContent = '';
 
   // --- Render ---
 
@@ -416,14 +397,10 @@ function SessionNodeComponent({ data }: NodeProps) {
     }
 
     // Markdown preview (chat mode, no preview URL)
-    if (showMarkdown) {
+    if (showMarkdown && markdownContent) {
       return (
         <>
-          {markdownContent ? (
-            <MarkdownPreview content={markdownContent} sessionId={nodeData.id} onSwitchToTerminal={switchToTerminal} />
-          ) : (
-            <ChatView sessionId={nodeData.id} tool={nodeData.tool} />
-          )}
+          <MarkdownPreview content={markdownContent} sessionId={nodeData.id} onSwitchToTerminal={switchToTerminal} />
           {intel.pendingQuestion && (
             <QuestionCard
               question={intel.pendingQuestion}
