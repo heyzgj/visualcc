@@ -17,6 +17,8 @@ const nodeTypes = {
   session: SessionNode,
 };
 
+const DEFAULT_TILE_SIZE = { width: 560, height: 420 };
+
 export default function Canvas() {
   const sessions = useSessionStore((s) => s.sessions);
   const renderModes = useSessionStore((s) => s.renderModes);
@@ -51,18 +53,30 @@ export default function Canvas() {
 
   const nodes: Node[] = useMemo(
     () =>
-      sessions.map((session) => ({
-        id: session.id,
-        type: 'session',
-        position: session.position,
-        data: {
-          ...session,
-          zoomTier: tier,
-          renderMode: renderModes[session.id] ?? 'chat',
-          tileSize: tileSizes[session.id] ?? { width: 560, height: 420 },
-        },
-        dragHandle: '.tile-header',
-      })),
+      sessions.map((session) => {
+        const tileSize = tileSizes[session.id] ?? DEFAULT_TILE_SIZE;
+
+        return {
+          id: session.id,
+          type: 'session',
+          position: session.position,
+          width: tileSize.width,
+          height: tileSize.height,
+          initialWidth: tileSize.width,
+          initialHeight: tileSize.height,
+          style: {
+            width: tileSize.width,
+            height: tileSize.height,
+          },
+          data: {
+            ...session,
+            zoomTier: tier,
+            renderMode: renderModes[session.id] ?? 'chat',
+            tileSize,
+          },
+          dragHandle: '.tile-header',
+        };
+      }),
     [sessions, tier, renderModes, tileSizes]
   );
 
@@ -95,6 +109,18 @@ export default function Canvas() {
     [sessions]
   );
 
+  const minimapNodeStrokeColor = useCallback(
+    (node: Node) => {
+      const session = sessions.find((s) => s.id === node.id);
+      if (!session) return 'rgba(255, 255, 255, 0.08)';
+      if (session.isGhost) {
+        return 'rgba(176, 174, 165, 0.35)';
+      }
+      return session.status === 'active' ? 'rgba(217, 119, 87, 0.75)' : 'rgba(255, 255, 255, 0.12)';
+    },
+    [sessions]
+  );
+
   return (
     <>
       <ReactFlow
@@ -123,6 +149,7 @@ export default function Canvas() {
         />
         <MiniMap
           nodeColor={minimapNodeColor}
+          nodeStrokeColor={minimapNodeStrokeColor}
           nodeStrokeWidth={1.5}
           nodeBorderRadius={4}
           maskColor="rgba(217, 119, 87, 0.06)"

@@ -1,8 +1,42 @@
 use tauri::State;
+use std::fs;
+use std::path::Path;
 
 use crate::process_manager::ProcessManager;
 use crate::pty_manager::{PtyManager, TmuxSessionInfo};
 use crate::session::{SessionInfo, ToolType};
+
+fn validate_cwd(cwd: &str) -> Result<(), String> {
+    let path = Path::new(cwd);
+
+    if !path.exists() {
+        return Err(format!("Project directory does not exist: {}", cwd));
+    }
+
+    if !path.is_dir() {
+        return Err(format!("Project directory is not a folder: {}", cwd));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn prepare_reviewer_workspace(claude_md: String) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or_else(|| "Unable to resolve home directory".to_string())?;
+    let clockwork = home.join(".clockwork");
+    let outbox = clockwork.join("outbox");
+    let cards = clockwork.join("cards");
+    let claude_md_path = clockwork.join("CLAUDE.md");
+
+    fs::create_dir_all(&outbox)
+        .map_err(|e| format!("Unable to create Reviewer outbox: {}", e))?;
+    fs::create_dir_all(&cards)
+        .map_err(|e| format!("Unable to create Reviewer cards directory: {}", e))?;
+    fs::write(&claude_md_path, claude_md)
+        .map_err(|e| format!("Unable to write Reviewer instructions: {}", e))?;
+
+    Ok(clockwork.to_string_lossy().to_string())
+}
 
 // === PTY-based commands (terminal fallback) ===
 
@@ -15,6 +49,7 @@ pub fn create_session(
     initial_prompt: Option<String>,
 ) -> Result<String, String> {
     eprintln!("[VisualCC-Rust] create_session called: tool={:?}, cwd={}", tool, cwd);
+    validate_cwd(&cwd)?;
     let result = pty_manager.create_session(&app, tool, cwd, initial_prompt);
     match &result {
         Ok(id) => eprintln!("[VisualCC-Rust] create_session OK: id={}", id),
@@ -126,6 +161,7 @@ pub fn create_structured_session(
     cwd: String,
     initial_prompt: Option<String>,
 ) -> Result<String, String> {
+    validate_cwd(&cwd)?;
     process_manager.create_session(&app, tool, cwd, initial_prompt)
 }
 

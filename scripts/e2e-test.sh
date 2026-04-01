@@ -1,9 +1,10 @@
 #!/bin/bash
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "=== VisualCC E2E Backend Tests ==="
 PASS=0; FAIL=0
 
 check() {
-  if eval "$2" > /dev/null 2>&1; then
+  if (cd "$ROOT_DIR" && eval "$2") > /dev/null 2>&1; then
     echo "  PASS: $1"; ((PASS++))
   else
     echo "  FAIL: $1"; ((FAIL++))
@@ -16,7 +17,9 @@ check "T1.1 TypeScript compiles" "npm run build"
 check "T1.2 Rust compiles" "cd src-tauri && cargo check"
 
 echo ""
-echo "--- Code Quality ---"
+echo "--- Detection & Quality ---"
+check "T4.1 Prompt detector fixtures" "node --experimental-strip-types scripts/test-session-prompt-detection.ts"
+check "T8.3 Clockwork card fixtures" "node --experimental-strip-types scripts/test-clockwork-card-state.ts"
 check "T4.4 No time-based active" "! grep -q 'elapsed.*10000' src/hooks/useSessionEvents.ts"
 check "T9.1 No full-store subscription" "! grep -q 'useSessionStore()' src/hooks/useSession.ts"
 check "T9.2 EMPTY_MESSAGES exists" "grep -q 'EMPTY_MESSAGES' src/components/SessionNode.tsx"
@@ -24,11 +27,15 @@ check "T9.3 No re-render on callback" "grep -q '_sessionEventCallback = callback
 check "T9.4 Atomic renderMode" "grep -q \"addSession(session, 'terminal')\" src/hooks/useSession.ts"
 check "T9.5 PTY output buffered" "test $(grep -c 'bufferRef' src/hooks/usePtyOutput.ts) -gt 3"
 check "T8.6 5 escalation principles" "test $(grep -c -E 'Reversibility|Blast radius|Precedent|Cost.*Safety|Taste.*Design' src/templates/reviewer-prompt.ts) -eq 5"
+check "T5.4 Startup rehydrates into ghosts" "grep -q 'REHYDRATE_ON_STARTUP_KEY' src/stores/sessionStore.ts && grep -q 'prepareForStartup' src/stores/sessionStore.ts"
+check "T5.5 Ghost dismissal persists" "grep -q 'removeGhost' src/stores/sessionStore.ts && grep -q 'persistSessions(next.sessions, next.tileSizes)' src/stores/sessionStore.ts"
+check "T11.1 Minimap receives explicit node dimensions" "grep -q 'initialWidth' src/components/Canvas.tsx && grep -q 'nodeStrokeColor' src/components/Canvas.tsx"
 
 echo ""
 echo "--- tmux Backend ---"
 check "T2.1 which_tool exists" "grep -q 'fn which_tool' src-tauri/src/pty_manager.rs"
 check "T2.9 TERM set" "grep -q 'xterm-256color' src-tauri/src/pty_manager.rs"
+check "T2.10 reattach command exists" "grep -q 'reattach_session' src-tauri/src/lib.rs"
 
 echo ""
 echo "--- tmux Integration ---"

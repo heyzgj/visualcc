@@ -87,6 +87,7 @@ export default function App() {
 
   // On startup: discover surviving tmux sessions and mark live ghosts
   useEffect(() => {
+    useSessionStore.getState().prepareForStartup();
     discoverTmuxSessions();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

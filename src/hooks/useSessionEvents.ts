@@ -3,6 +3,12 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useSessionStore, getSessionEventCallback } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { SessionStatus, QuestionInfo } from '../types/session';
+import {
+  URL_REGEX,
+  BUILD_PATTERNS,
+  ERROR_PATTERNS,
+  detectPendingQuestion,
+} from '../utils/sessionPromptDetection';
 
 // --- Event Types ---
 
@@ -24,21 +30,6 @@ function stripAnsi(str: string): string {
     .replace(/\x1b[>=<]/g, '')                  // Keypad modes
     .replace(/\r/g, '');                         // Carriage returns
 }
-
-// --- Detection regexes (reused from useOutputIntelligence) ---
-
-const URL_REGEX = /https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)\/?/;
-const YN_REGEX = /\(Y\/n\)|\(y\/N\)|\[Y\/n\]|\[y\/N\]|\(yes\/no\)/i;
-const PERMISSION_REGEX = /\bAllow\b|\bPermission\b|\bapprove\b|\bAccept\b|\bproceed\b.*\?/i;
-
-// Signal words indicating the session is waiting for guidance
-const SIGNAL_WORDS_REGEX = /waiting for|need guidance|your input|please advise|what would you like|should I|what should|how should/i;
-
-// Build/install patterns that indicate long-running but not blocked
-const BUILD_PATTERNS = /Installing\.\.\.|Building\.\.\.|Testing\.\.\.|Compiling\.\.\.|Downloading|Resolving|npm\s+(install|ci)|yarn\s+install|pnpm\s+install|cargo\s+build|running\s+tests/i;
-
-// Error patterns in output
-const ERROR_PATTERNS = /\bfatal\b|\bpanic\b|\bunhandled\s+exception\b|\bsegmentation\s+fault\b|\bkilled\b/i;
 
 // --- Per-session buffer ---
 
@@ -166,27 +157,6 @@ export function useSessionEvents() {
             buf.detectedUrl = urlMatch[0].replace(/\/$/, '');
           }
 
-          // Clear pending question on new output
-          if (buf.pendingQuestion) {
-            buf.pendingQuestion = null;
-          }
-
-          // Detect questions (Y/n, permission, open-ended)
-          // When detected, immediately set status to 'active' (needs input)
-          if (YN_REGEX.test(stripped)) {
-            buf.pendingQuestion = { text: stripped, type: 'yn', detectedAt: Date.now() };
-            useSessionStore.getState().updateStatus(session.id, 'active');
-            fireBlockedEvent(session.id, buf);
-          } else if (PERMISSION_REGEX.test(stripped)) {
-            buf.pendingQuestion = { text: stripped, type: 'permission', detectedAt: Date.now() };
-            useSessionStore.getState().updateStatus(session.id, 'active');
-            fireBlockedEvent(session.id, buf);
-          } else if (SIGNAL_WORDS_REGEX.test(stripped)) {
-            buf.pendingQuestion = { text: stripped, type: 'open', detectedAt: Date.now() };
-            useSessionStore.getState().updateStatus(session.id, 'active');
-            fireBlockedEvent(session.id, buf);
-          }
-
           // Detect errors in output
           if (ERROR_PATTERNS.test(stripped)) {
             const callback = getSessionEventCallback();
@@ -196,18 +166,24 @@ export function useSessionEvents() {
           }
         }
 
-        // Also check partial accumulated line
+        // Re-evaluate prompt state after ingesting the current chunk so
+        // partial-screen prompts (Codex update/trust dialogs, tmux prompts)
+        // can still surface as Needs Input without waiting for a newline.
         const partialStripped = stripAnsi(buf.rawAccum).trim();
         if (partialStripped) {
           buf.lastActivity = partialStripped;
+        }
 
-          if (YN_REGEX.test(partialStripped)) {
-            buf.pendingQuestion = { text: partialStripped, type: 'yn', detectedAt: Date.now() };
-            fireBlockedEvent(session.id, buf);
-          } else if (PERMISSION_REGEX.test(partialStripped)) {
-            buf.pendingQuestion = { text: partialStripped, type: 'permission', detectedAt: Date.now() };
-            fireBlockedEvent(session.id, buf);
-          }
+        buf.pendingQuestion = null;
+        const pendingQuestion = detectPendingQuestion({
+          recentLines: buf.lines,
+          partialLine: partialStripped,
+        });
+
+        if (pendingQuestion) {
+          buf.pendingQuestion = pendingQuestion;
+          useSessionStore.getState().updateStatus(session.id, 'active');
+          fireBlockedEvent(session.id, buf);
         }
 
         // Debounced update to store

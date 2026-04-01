@@ -19,7 +19,9 @@ export interface FounderEventLogEntry {
 }
 
 const PERSIST_KEY = 'visualcc-sessions';
+const REHYDRATE_ON_STARTUP_KEY = 'visualcc-force-ghost-rehydrate';
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const DEFAULT_TILE_SIZE = { width: 560, height: 420 };
 
 interface PersistedSession {
   tool: ToolType;
@@ -32,49 +34,105 @@ interface PersistedSession {
   tmuxName?: string;
 }
 
-function loadPersistedSessions(): SessionInfo[] {
+function readPersistedSessions(): PersistedSession[] {
   try {
     const saved = localStorage.getItem(PERSIST_KEY);
     if (!saved) return [];
-    const items: PersistedSession[] = JSON.parse(saved);
-    return items.map((item, i) => ({
-      id: item.tmuxName ? item.tmuxName.replace('vcc-', '') : `ghost-${i}-${Date.now()}`,
-      tool: item.tool,
-      cwd: item.cwd,
-      label: item.label,
-      status: 'done' as SessionStatus,
-      created_at: Date.now(),
-      position: item.position,
-      isGhost: true,
-      taskTitle: item.taskTitle,
-      previewUrl: item.previewUrl,
-      tmuxName: item.tmuxName,
-      isLiveGhost: false, // Will be updated by discoverTmuxSessions
-    }));
+    return JSON.parse(saved) as PersistedSession[];
   } catch {
     return [];
   }
 }
 
+function buildGhostSession(item: PersistedSession, index: number, now: number): SessionInfo {
+  return {
+    id: item.tmuxName ? item.tmuxName.replace('vcc-', '') : `ghost-${index}-${now}`,
+    tool: item.tool,
+    cwd: item.cwd,
+    label: item.label,
+    status: 'done' as SessionStatus,
+    created_at: now,
+    position: item.position,
+    isGhost: true,
+    taskTitle: item.taskTitle,
+    previewUrl: item.previewUrl,
+    tmuxName: item.tmuxName,
+    isLiveGhost: false,
+  };
+}
+
+function loadPersistedSessions(): SessionInfo[] {
+  const now = Date.now();
+  return readPersistedSessions().map((item, index) => buildGhostSession(item, index, now));
+}
+
+function sessionPersistenceKey(session: Pick<SessionInfo, 'tool' | 'cwd' | 'taskTitle' | 'previewUrl' | 'tmuxName'>): string {
+  if (session.tmuxName) {
+    return `tmux:${session.tmuxName}`;
+  }
+
+  return [
+    'session',
+    session.tool,
+    session.cwd,
+    session.taskTitle ?? '',
+    session.previewUrl ?? '',
+  ].join('::');
+}
+
+function toPersistedSession(
+  session: SessionInfo,
+  tileSizes: Record<string, { width: number; height: number }>
+): PersistedSession {
+  return {
+    tool: session.tool,
+    cwd: session.cwd,
+    label: session.label,
+    position: session.position,
+    tileSize: tileSizes[session.id] ?? DEFAULT_TILE_SIZE,
+    taskTitle: session.taskTitle,
+    previewUrl: session.previewUrl,
+    tmuxName: session.tmuxName,
+  };
+}
+
+function serializeSessions(
+  sessions: SessionInfo[],
+  tileSizes: Record<string, { width: number; height: number }>
+): PersistedSession[] {
+  const deduped = new Map<string, PersistedSession>();
+
+  for (const session of sessions) {
+    const key = sessionPersistenceKey(session);
+    if (deduped.has(key)) {
+      deduped.delete(key);
+    }
+    deduped.set(key, toPersistedSession(session, tileSizes));
+  }
+
+  return Array.from(deduped.values());
+}
+
+function flushPersistedSessions(
+  sessions: SessionInfo[],
+  tileSizes: Record<string, { width: number; height: number }>
+) {
+  localStorage.setItem(PERSIST_KEY, JSON.stringify(serializeSessions(sessions, tileSizes)));
+}
+
+function buildStartupGhost(session: SessionInfo): SessionInfo {
+  return {
+    ...session,
+    status: 'done',
+    isGhost: true,
+    isLiveGhost: false,
+  };
+}
+
 function persistSessions(sessions: SessionInfo[], tileSizes: Record<string, { width: number; height: number }>) {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
-    const live = sessions.filter((s) => !s.isGhost);
-    if (live.length === 0 && sessions.filter((s) => s.isGhost).length > 0) {
-      // Don't overwrite persisted data if we only have ghosts
-      return;
-    }
-    const data: PersistedSession[] = live.map((s) => ({
-      tool: s.tool,
-      cwd: s.cwd,
-      label: s.label,
-      position: s.position,
-      tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
-      taskTitle: s.taskTitle,
-      previewUrl: s.previewUrl,
-      tmuxName: s.tmuxName,
-    }));
-    localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+    flushPersistedSessions(sessions, tileSizes);
   }, 500);
 }
 
@@ -109,6 +167,8 @@ interface SessionStore {
   markLiveGhosts: (liveTmuxSessions: TmuxSessionInfo[]) => void;
   /** Replace a live ghost with a reattached session */
   reattachGhost: (ghostId: string, newSession: SessionInfo) => void;
+  /** Normalize any lingering live sessions into ghosts when the app boots back up */
+  prepareForStartup: () => void;
 
   // Vacation Mode actions
   setMode: (mode: AppMode) => void;
@@ -122,13 +182,10 @@ interface SessionStore {
 const initialGhosts = loadPersistedSessions();
 const initialTileSizes: Record<string, { width: number; height: number }> = {};
 try {
-  const saved = localStorage.getItem(PERSIST_KEY);
-  if (saved) {
-    const items: PersistedSession[] = JSON.parse(saved);
-    initialGhosts.forEach((ghost, i) => {
-      initialTileSizes[ghost.id] = items[i]?.tileSize ?? { width: 560, height: 420 };
-    });
-  }
+  const items = readPersistedSessions();
+  initialGhosts.forEach((ghost, i) => {
+    initialTileSizes[ghost.id] = items[i]?.tileSize ?? DEFAULT_TILE_SIZE;
+  });
 } catch {}
 
 export const useSessionStore = create<SessionStore>((set, _get) => ({
@@ -152,7 +209,7 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
         messages: { ...state.messages, [session.id]: [] as ChatEvent[] },
         renderModes: { ...state.renderModes, [session.id]: (renderMode ?? 'chat') as RenderMode },
         parseErrors: { ...state.parseErrors, [session.id]: 0 },
-        tileSizes: { ...state.tileSizes, [session.id]: { width: 560, height: 420 } },
+        tileSizes: { ...state.tileSizes, [session.id]: DEFAULT_TILE_SIZE },
       };
       persistSessions(next.sessions, next.tileSizes);
       return next;
@@ -179,26 +236,41 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
 
   removeGhost: (id) =>
     set((state) => {
+      const { [id]: _msgs, ...restMessages } = state.messages;
+      const { [id]: _mode, ...restModes } = state.renderModes;
+      const { [id]: _errs, ...restErrors } = state.parseErrors;
       const { [id]: _size, ...restSizes } = state.tileSizes;
-      return {
+      const { [id]: _intel, ...restIntel } = state.sessionIntel;
+      const next = {
         sessions: state.sessions.filter((s) => s.id !== id),
+        messages: restMessages,
+        renderModes: restModes,
+        parseErrors: restErrors,
         tileSizes: restSizes,
+        sessionIntel: restIntel,
       };
+      persistSessions(next.sessions, next.tileSizes);
+      return next;
     }),
 
   relaunchGhost: (ghostId, newSession) =>
     set((state) => {
       const ghost = state.sessions.find((s) => s.id === ghostId);
-      const ghostTileSize = state.tileSizes[ghostId] ?? { width: 560, height: 420 };
+      const ghostTileSize = state.tileSizes[ghostId] ?? DEFAULT_TILE_SIZE;
+      const { [ghostId]: _msgs, ...restMessages } = state.messages;
+      const { [ghostId]: _mode, ...restModes } = state.renderModes;
+      const { [ghostId]: _errs, ...restErrors } = state.parseErrors;
       const { [ghostId]: _size, ...restSizes } = state.tileSizes;
+      const { [ghostId]: _intel, ...restIntel } = state.sessionIntel;
       const next = {
         sessions: state.sessions
           .filter((s) => s.id !== ghostId)
           .concat({ ...newSession, position: ghost?.position ?? newSession.position }),
-        messages: { ...state.messages, [newSession.id]: [] as ChatEvent[] },
-        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' as RenderMode },
-        parseErrors: { ...state.parseErrors, [newSession.id]: 0 },
+        messages: { ...restMessages, [newSession.id]: [] as ChatEvent[] },
+        renderModes: { ...restModes, [newSession.id]: 'terminal' as RenderMode },
+        parseErrors: { ...restErrors, [newSession.id]: 0 },
         tileSizes: { ...restSizes, [newSession.id]: ghostTileSize },
+        sessionIntel: restIntel,
       };
       persistSessions(next.sessions, next.tileSizes);
       return next;
@@ -272,8 +344,8 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
       const liveNames = new Set(liveTmuxSessions.map((s) => s.tmux_name));
       return {
         sessions: state.sessions.map((s) => {
-          if (s.isGhost && s.tmuxName && liveNames.has(s.tmuxName)) {
-            return { ...s, isLiveGhost: true };
+          if (s.isGhost && s.tmuxName) {
+            return { ...s, isLiveGhost: liveNames.has(s.tmuxName) };
           }
           return s;
         }),
@@ -283,18 +355,51 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   reattachGhost: (ghostId, newSession) =>
     set((state) => {
       const ghost = state.sessions.find((s) => s.id === ghostId);
-      const ghostTileSize = state.tileSizes[ghostId] ?? { width: 560, height: 420 };
+      const ghostTileSize = state.tileSizes[ghostId] ?? DEFAULT_TILE_SIZE;
+      const { [ghostId]: _msgs, ...restMessages } = state.messages;
+      const { [ghostId]: _mode, ...restModes } = state.renderModes;
+      const { [ghostId]: _errs, ...restErrors } = state.parseErrors;
       const { [ghostId]: _size, ...restSizes } = state.tileSizes;
+      const { [ghostId]: _intel, ...restIntel } = state.sessionIntel;
       const next = {
         sessions: state.sessions
           .filter((s) => s.id !== ghostId)
           .concat({ ...newSession, position: ghost?.position ?? newSession.position }),
-        messages: { ...state.messages, [newSession.id]: [] as ChatEvent[] },
-        renderModes: { ...state.renderModes, [newSession.id]: 'terminal' as RenderMode },
-        parseErrors: { ...state.parseErrors, [newSession.id]: 0 },
+        messages: { ...restMessages, [newSession.id]: [] as ChatEvent[] },
+        renderModes: { ...restModes, [newSession.id]: 'terminal' as RenderMode },
+        parseErrors: { ...restErrors, [newSession.id]: 0 },
         tileSizes: { ...restSizes, [newSession.id]: ghostTileSize },
+        sessionIntel: restIntel,
       };
       persistSessions(next.sessions, next.tileSizes);
+      return next;
+    }),
+
+  prepareForStartup: () =>
+    set((state) => {
+      const shouldRehydrateGhosts = localStorage.getItem(REHYDRATE_ON_STARTUP_KEY) === '1';
+      localStorage.removeItem(REHYDRATE_ON_STARTUP_KEY);
+
+      if (!shouldRehydrateGhosts) {
+        return state;
+      }
+
+      const hasLiveSessions = state.sessions.some((session) => !session.isGhost);
+      if (!hasLiveSessions) {
+        return state;
+      }
+
+      const next = {
+        sessions: state.sessions.map((session) =>
+          session.isGhost ? session : buildStartupGhost(session)
+        ),
+        messages: {},
+        renderModes: {},
+        parseErrors: {},
+        tileSizes: state.tileSizes,
+        sessionIntel: {},
+      };
+      flushPersistedSessions(next.sessions, next.tileSizes);
       return next;
     }),
 
@@ -311,19 +416,12 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     const { sessions, tileSizes } = useSessionStore.getState();
-    const live = sessions.filter((s) => !s.isGhost);
-    if (live.length === 0) return;
-    const data: PersistedSession[] = live.map((s) => ({
-      tool: s.tool,
-      cwd: s.cwd,
-      label: s.label,
-      position: s.position,
-      tileSize: tileSizes[s.id] ?? { width: 560, height: 420 },
-      taskTitle: s.taskTitle,
-      previewUrl: s.previewUrl,
-      tmuxName: s.tmuxName,
-    }));
-    localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    localStorage.setItem(REHYDRATE_ON_STARTUP_KEY, '1');
+    flushPersistedSessions(sessions, tileSizes);
   });
 }
 

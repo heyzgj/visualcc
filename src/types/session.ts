@@ -37,7 +37,7 @@ export interface CreateSessionRequest {
 
 export interface QuestionInfo {
   text: string;
-  type: 'yn' | 'permission' | 'open';
+  type: 'yn' | 'permission' | 'open' | 'enter' | 'choice';
   detectedAt: number;
 }
 

@@ -23,6 +23,8 @@
     {
       "identifier": "fs:scope",
       "allow": [
+        { "path": "$HOME/.clockwork" },
+        { "path": "$HOME/.clockwork/*" },
         { "path": "$HOME/.clockwork/**" }
       ]
     }

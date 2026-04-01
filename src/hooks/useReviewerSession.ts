@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore } from '../stores/sessionStore';
 import type { SessionEvent } from './useSessionEvents';
@@ -10,32 +10,33 @@ import {
 
 const RESPONSE_TIMEOUT_MS = 120_000; // 2 minutes
 
+const reviewerRuntime: {
+  isProcessing: boolean;
+  eventQueue: SessionEvent[];
+  isPaused: boolean;
+  responseResolver: (() => void) | null;
+} = {
+  isProcessing: false,
+  eventQueue: [],
+  isPaused: false,
+  responseResolver: null,
+};
+
 /**
  * Manages the Reviewer session lifecycle.
  * The Reviewer is a regular Claude Code session running in ~/.clockwork/
  * that acts as the owner's proxy for decision-making.
  */
 export function useReviewerSession() {
-  const isProcessingRef = useRef(false);
-  const eventQueueRef = useRef<SessionEvent[]>([]);
-  const isPausedRef = useRef(false);
-  const responseResolverRef = useRef<(() => void) | null>(null);
-
   /**
    * Create the ~/.clockwork/ directory structure and CLAUDE.md,
    * then spawn a Claude Code session there.
    */
   const startReviewer = useCallback(async () => {
     try {
-      // Resolve home directory
-      const homeDir = await resolveHome();
-      const clockworkPath = `${homeDir}/.clockwork`;
-
-      // Create directory structure
-      await createClockworkDirs(clockworkPath);
-
-      // Write CLAUDE.md
-      await writeClockworkFile(clockworkPath, 'CLAUDE.md', REVIEWER_CLAUDE_MD);
+      const clockworkPath = await invoke<string>('prepare_reviewer_workspace', {
+        claudeMd: REVIEWER_CLAUDE_MD,
+      });
 
       // Create a Claude Code session at ~/.clockwork/
       const id = await invoke<string>('create_session', {
@@ -46,6 +47,7 @@ export function useReviewerSession() {
 
       // Register reviewer session ID (not added to sessions list for canvas)
       useSessionStore.getState().setReviewerSessionId(id);
+      reviewerRuntime.isPaused = false;
 
       // Wait for session to boot
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -66,14 +68,14 @@ export function useReviewerSession() {
    * Stop routing events but keep session alive.
    */
   const pauseReviewer = useCallback(() => {
-    isPausedRef.current = true;
+    reviewerRuntime.isPaused = true;
   }, []);
 
   /**
    * Resume routing. Sends a catch-up summary.
    */
   const resumeReviewer = useCallback(async () => {
-    isPausedRef.current = false;
+    reviewerRuntime.isPaused = false;
     const reviewerSessionId = useSessionStore.getState().reviewerSessionId;
     if (!reviewerSessionId) return;
 
@@ -87,10 +89,10 @@ export function useReviewerSession() {
    * Events are queued and processed serially.
    */
   const routeEvent = useCallback((event: SessionEvent) => {
-    if (isPausedRef.current) return;
+    if (reviewerRuntime.isPaused) return;
 
-    eventQueueRef.current.push(event);
-    if (!isProcessingRef.current) {
+    reviewerRuntime.eventQueue.push(event);
+    if (!reviewerRuntime.isProcessing) {
       processNext();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,17 +102,17 @@ export function useReviewerSession() {
    * Process the next queued event.
    */
   async function processNext() {
-    if (eventQueueRef.current.length === 0) {
-      isProcessingRef.current = false;
+    if (reviewerRuntime.eventQueue.length === 0) {
+      reviewerRuntime.isProcessing = false;
       return;
     }
 
-    isProcessingRef.current = true;
-    const event = eventQueueRef.current.shift()!;
+    reviewerRuntime.isProcessing = true;
+    const event = reviewerRuntime.eventQueue.shift()!;
 
     const reviewerSessionId = useSessionStore.getState().reviewerSessionId;
     if (!reviewerSessionId) {
-      isProcessingRef.current = false;
+      reviewerRuntime.isProcessing = false;
       return;
     }
 
@@ -121,11 +123,11 @@ export function useReviewerSession() {
       // Wait for response file or timeout
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
-          responseResolverRef.current = null;
+          reviewerRuntime.responseResolver = null;
           resolve();
         }, RESPONSE_TIMEOUT_MS);
 
-        responseResolverRef.current = () => {
+        reviewerRuntime.responseResolver = () => {
           clearTimeout(timer);
           resolve();
         };
@@ -142,9 +144,9 @@ export function useReviewerSession() {
    * Called by useClockwork when it detects a new outbox/ or cards/ file.
    */
   const signalResponse = useCallback(() => {
-    if (responseResolverRef.current) {
-      responseResolverRef.current();
-      responseResolverRef.current = null;
+    if (reviewerRuntime.responseResolver) {
+      reviewerRuntime.responseResolver();
+      reviewerRuntime.responseResolver = null;
     }
   }, []);
 
@@ -208,45 +210,5 @@ async function writeToReviewer(sessionId: string, message: string): Promise<void
     await invoke('write_to_session', { id: sessionId, data: message + '\n' });
   } catch (err) {
     console.error('Failed to write to reviewer session:', err);
-  }
-}
-
-async function resolveHome(): Promise<string> {
-  try {
-    const { homeDir } = await import('@tauri-apps/api/path');
-    const home = await homeDir();
-    // Remove trailing slash if present
-    return home.endsWith('/') ? home.slice(0, -1) : home;
-  } catch {
-    return '/tmp';
-  }
-}
-
-async function createClockworkDirs(basePath: string): Promise<void> {
-  try {
-    const { mkdir, exists } = await import('@tauri-apps/plugin-fs');
-    const dirExists = await exists(basePath);
-    if (!dirExists) {
-      await mkdir(basePath, { recursive: true });
-    }
-    const outboxExists = await exists(`${basePath}/outbox`);
-    if (!outboxExists) {
-      await mkdir(`${basePath}/outbox`, { recursive: true });
-    }
-    const cardsExists = await exists(`${basePath}/cards`);
-    if (!cardsExists) {
-      await mkdir(`${basePath}/cards`, { recursive: true });
-    }
-  } catch (err) {
-    console.error('Failed to create clockwork dirs:', err);
-  }
-}
-
-async function writeClockworkFile(basePath: string, filename: string, content: string): Promise<void> {
-  try {
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-    await writeTextFile(`${basePath}/${filename}`, content);
-  } catch (err) {
-    console.error('Failed to write clockwork file:', err);
   }
 }

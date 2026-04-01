@@ -85,6 +85,15 @@ export default function QuestionCard({
               </button>
             </>
           )}
+          {question.type === 'enter' && (
+            <button
+              className="question-btn question-btn--yes"
+              onClick={() => sendAnswer('')}
+              disabled={sending}
+            >
+              ↵
+            </button>
+          )}
         </div>
       </div>
     );
@@ -122,14 +131,23 @@ export default function QuestionCard({
             </button>
           </>
         )}
-        {question.type === 'open' && (
+        {question.type === 'enter' && (
+          <button
+            className="question-btn question-btn--yes"
+            onClick={() => sendAnswer('')}
+            disabled={sending}
+          >
+            Continue
+          </button>
+        )}
+        {(question.type === 'open' || question.type === 'choice') && (
           <form className="question-custom-form" onSubmit={handleCustomSubmit}>
             <input
               className="question-custom-input"
               type="text"
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              placeholder="Type your response..."
+              placeholder={question.type === 'choice' ? 'Type 1, 2, or your answer...' : 'Type your response...'}
               autoFocus
               disabled={sending}
             />

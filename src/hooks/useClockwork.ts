@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore } from '../stores/sessionStore';
 import { useCardStore, type DecisionCard } from '../stores/cardStore';
+import type { ClockworkCardEntry } from '../utils/clockworkCards';
 import type { SessionEvent } from './useSessionEvents';
 
 const HISTORY_FILE = 'history.jsonl';
@@ -14,17 +15,6 @@ interface OutboxEntry {
   sessionId: string;
   instruction: string | null;
   note?: string;
-}
-
-// --- Card JSON shape ---
-interface CardEntry {
-  sessionId: string;
-  project: string;
-  title: string;
-  context: string;
-  options: Array<{ label: string; description: string; recommended: boolean }>;
-  recommendReasoning: string;
-  isTasteDecision: boolean;
 }
 
 // --- Defensive JSON parsing ---
@@ -55,7 +45,7 @@ function parseClockworkJson(content: string): unknown | null {
 export function useClockwork() {
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const knownOutboxFilesRef = useRef<Set<string>>(new Set());
-  const knownCardFilesRef = useRef<Set<string>>(new Set());
+  const cardContentCacheRef = useRef<Record<string, string>>({});
   const clockworkPathRef = useRef<string | null>(null);
 
   // Circuit breaker state
@@ -144,6 +134,9 @@ export function useClockwork() {
               startResolutionTimer(parsed.sessionId);
             }
 
+            // If reviewer resolved a follow-up, clear any waiting card for this session.
+            useCardStore.getState().resolveCardsForSession(parsed.sessionId);
+
             // Log to history
             await logToHistory(basePath, {
               ts: new Date().toISOString(),
@@ -185,34 +178,24 @@ export function useClockwork() {
         return;
       }
 
+      const nextCardPaths = new Set<string>();
+
       for (const entry of entries) {
         if (!entry.name || !entry.name.endsWith('.json')) continue;
-        if (knownCardFilesRef.current.has(entry.name)) continue;
-
-        knownCardFilesRef.current.add(entry.name);
 
         try {
           const filePath = `${basePath}/cards/${entry.name}`;
+          nextCardPaths.add(filePath);
           const content = await readTextFile(filePath);
-          const parsed = parseClockworkJson(content) as CardEntry | null;
+          if (cardContentCacheRef.current[filePath] === content) {
+            continue;
+          }
+
+          const parsed = parseClockworkJson(content) as ClockworkCardEntry | null;
 
           if (parsed && parsed.sessionId) {
-            // Add to card store
-            const card: DecisionCard = {
-              id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              sessionId: parsed.sessionId,
-              project: parsed.project ?? 'Unknown',
-              title: parsed.title ?? 'Decision needed',
-              context: parsed.context ?? '',
-              options: parsed.options ?? [],
-              recommendReasoning: parsed.recommendReasoning ?? '',
-              isTasteDecision: parsed.isTasteDecision ?? false,
-              exchangeCount: 0,
-              createdAt: Date.now(),
-              filePath: filePath,
-            };
-
-            useCardStore.getState().addCard(card);
+            useCardStore.getState().upsertClockworkCard(parsed, filePath);
+            cardContentCacheRef.current[filePath] = content;
 
             // Signal reviewer that processing is done
             if (signalResolverRef.current) {
@@ -221,7 +204,13 @@ export function useClockwork() {
           }
         } catch (err) {
           console.error('Error processing card file:', entry.name, err);
-          knownCardFilesRef.current.delete(entry.name);
+          delete cardContentCacheRef.current[`${basePath}/cards/${entry.name}`];
+        }
+      }
+
+      for (const cachedPath of Object.keys(cardContentCacheRef.current)) {
+        if (!nextCardPaths.has(cachedPath)) {
+          delete cardContentCacheRef.current[cachedPath];
         }
       }
     } catch (err) {
@@ -355,6 +344,7 @@ export function useClockwork() {
       try {
         const { remove } = await import('@tauri-apps/plugin-fs');
         await remove(card.filePath);
+        delete cardContentCacheRef.current[card.filePath];
       } catch {
         // File may already be deleted
       }

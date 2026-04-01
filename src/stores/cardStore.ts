@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { removeCardsForSession, upsertClockworkCard, type ClockworkCardEntry } from '../utils/clockworkCards';
 
 export interface DecisionCard {
   id: string;
@@ -19,7 +20,9 @@ interface CardStore {
   cards: DecisionCard[];
 
   addCard: (card: DecisionCard) => void;
+  upsertClockworkCard: (parsed: ClockworkCardEntry, filePath: string) => void;
   resolveCard: (id: string) => void;
+  resolveCardsForSession: (sessionId: string) => void;
   updateCard: (id: string, updates: Partial<DecisionCard>) => void;
   dismissCard: (id: string) => void;
 }
@@ -32,9 +35,25 @@ export const useCardStore = create<CardStore>((set) => ({
       cards: [card, ...state.cards],  // Newest first
     })),
 
+  upsertClockworkCard: (parsed, filePath) =>
+    set((state) => ({
+      cards: upsertClockworkCard(
+        state.cards,
+        parsed,
+        filePath,
+        Date.now(),
+        () => `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      ),
+    })),
+
   resolveCard: (id) =>
     set((state) => ({
       cards: state.cards.filter((c) => c.id !== id),
+    })),
+
+  resolveCardsForSession: (sessionId) =>
+    set((state) => ({
+      cards: removeCardsForSession(state.cards, sessionId),
     })),
 
   updateCard: (id, updates) =>

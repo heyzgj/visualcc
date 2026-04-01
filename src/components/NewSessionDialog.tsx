@@ -4,6 +4,20 @@ import { useSession } from '../hooks/useSession';
 import { useRecentsStore } from '../stores/recentsStore';
 import type { ToolType } from '../types/session';
 
+function formatLaunchError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (/project directory does not exist|forbidden path/i.test(message)) {
+    return 'Project directory does not exist.';
+  }
+
+  if (/not a folder|must be a folder/i.test(message)) {
+    return 'Project directory must be a folder.';
+  }
+
+  return message;
+}
+
 export default function NewSessionDialog() {
   const setShowNewDialog = useSessionStore((s) => s.setShowNewDialog);
   const { createSession } = useSession();
@@ -27,23 +41,42 @@ export default function NewSessionDialog() {
   }, []);
 
   const handleLaunch = useCallback(async () => {
-    if (!cwd.trim()) return;
+    const trimmedCwd = cwd.trim();
+    if (!trimmedCwd) return;
     setLaunching(true);
     setError(null);
     try {
+      try {
+        const { exists, stat } = await import('@tauri-apps/plugin-fs');
+        const pathExists = await exists(trimmedCwd);
+        if (!pathExists) {
+          throw new Error('Project directory does not exist.');
+        }
+
+        const info = await stat(trimmedCwd);
+        if (!info.isDirectory) {
+          throw new Error('Project directory must be a folder.');
+        }
+      } catch (preflightErr) {
+        const preflightMessage = preflightErr instanceof Error ? preflightErr.message : String(preflightErr);
+        if (!/forbidden path|allow-exists/i.test(preflightMessage)) {
+          throw preflightErr;
+        }
+      }
+
       await createSession({
         tool,
-        cwd: cwd.trim(),
+        cwd: trimmedCwd,
         initial_prompt: prompt.trim() || undefined,
         taskTitle: taskTitle.trim() || undefined,
         previewUrl: previewUrl.trim() || undefined,
       });
       // Track in recents
-      useRecentsStore.getState().addRecent(tool, cwd.trim());
+      useRecentsStore.getState().addRecent(tool, trimmedCwd);
       setShowNewDialog(false);
     } catch (err) {
       console.error('Launch failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(formatLaunchError(err));
     } finally {
       setLaunching(false);
     }

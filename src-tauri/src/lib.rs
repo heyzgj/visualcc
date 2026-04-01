@@ -23,6 +23,7 @@ pub fn run() {
         .manage(process_manager)
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
+            commands::prepare_reviewer_workspace,
             commands::write_to_session,
             commands::resize_session,
             commands::kill_session,
