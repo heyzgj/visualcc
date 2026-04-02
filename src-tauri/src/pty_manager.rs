@@ -122,10 +122,9 @@ impl PtyManager {
 
         // 1. Spawn the tool inside a new detached tmux session
         let mut tmux_cmd = Command::new("tmux");
-        // Inherit current environment so tmux's shell can find dependencies
-        if let Ok(path) = std::env::var("PATH") {
-            tmux_cmd.env("PATH", &path);
-        }
+        // Build a comprehensive PATH that includes NVM, Homebrew, and system paths
+        let enriched_path = build_enriched_path();
+        tmux_cmd.env("PATH", &enriched_path);
         tmux_cmd.env("TERM", "xterm-256color");
         tmux_cmd.args([
             "new-session",
@@ -606,19 +605,109 @@ impl PtyManager {
     }
 }
 
-/// Resolve a tool name to its absolute path using `which`.
-/// Falls back to the bare name if `which` fails.
+/// Resolve a tool name to its absolute path.
+/// Checks common installation locations since the Tauri app process
+/// doesn't inherit shell profile (NVM, Homebrew paths not in PATH).
 fn which_tool(name: &str) -> String {
-    Command::new("which")
-        .arg(name)
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            } else {
-                None
+    // 1. Try `which` in current PATH (works in dev mode)
+    if let Ok(output) = Command::new("which").arg(name).output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                return path;
             }
-        })
-        .unwrap_or_else(|| name.to_string())
+        }
+    }
+
+    // 2. Try common NVM paths
+    if let Ok(home) = std::env::var("HOME") {
+        // Check NVM-managed node versions
+        let nvm_dir = format!("{}/.nvm/versions/node", home);
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            // Sort entries to prefer latest version
+            let mut versions: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .collect();
+            versions.sort();
+            versions.reverse();
+            for version_dir in versions {
+                let tool_path = version_dir.join("bin").join(name);
+                if tool_path.exists() {
+                    return tool_path.to_string_lossy().to_string();
+                }
+            }
+        }
+
+        // Check common Homebrew / system paths
+        for prefix in &[
+            format!("{}/bin", home),
+            format!("{}/.local/bin", home),
+            "/usr/local/bin".to_string(),
+            "/opt/homebrew/bin".to_string(),
+        ] {
+            let tool_path = format!("{}/{}", prefix, name);
+            if std::path::Path::new(&tool_path).exists() {
+                return tool_path;
+            }
+        }
+    }
+
+    // 3. Try running the shell profile to get PATH, then which
+    if let Ok(output) = Command::new("bash")
+        .args(["-l", "-c", &format!("which {}", name)])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                return path;
+            }
+        }
+    }
+
+    // Fall back to bare name
+    name.to_string()
+}
+
+/// Build a PATH string that includes common tool locations.
+/// The Tauri release app doesn't inherit shell profile, so NVM, Homebrew,
+/// etc. are missing from PATH. This function constructs a comprehensive PATH.
+fn build_enriched_path() -> String {
+    let mut paths: Vec<String> = Vec::new();
+
+    // Start with existing PATH
+    if let Ok(current) = std::env::var("PATH") {
+        paths.push(current);
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        // NVM paths — find all installed Node versions
+        let nvm_dir = format!("{}/.nvm/versions/node", home);
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            let mut versions: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .collect();
+            versions.sort();
+            versions.reverse();
+            for version_dir in versions {
+                let bin = version_dir.join("bin");
+                if bin.exists() {
+                    paths.push(bin.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        // Common paths
+        paths.push(format!("{}/bin", home));
+        paths.push(format!("{}/.local/bin", home));
+    }
+
+    paths.push("/usr/local/bin".to_string());
+    paths.push("/opt/homebrew/bin".to_string());
+    paths.push("/usr/bin".to_string());
+    paths.push("/bin".to_string());
+
+    paths.join(":")
 }
